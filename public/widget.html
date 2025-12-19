@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Поиск авиабилетов</title>
+    <link href="https://new.etm-system.com/widget/style.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: transparent; }
+        .button_action-color {
+            background-color: #f05922;
+            border-color: #f05922;
+        }
+        .search-panel { background: #fafafa; }
+        .seats-option__comfort .comfort__class_active {
+            background-color: #f05922;
+            color: #fff;
+            border-color: #f05922;
+        }
+        .seats-option__minus::after,
+        .seats-option__plus::after {
+            background-color: #fff;
+            color: #f05922;
+            border-color: #f05922;
+        }
+        .seats-option__comfort .comfort__class {
+            border: 1px solid #f05922;
+        }
+        .seats-option__adult,
+        .seats-option__child,
+        .seats-option__baby {
+            text-align: left;
+        }
+        @media screen and (max-width: 768px) {
+            .etm-calendar-wrap {
+                height: 65vh !important;
+                margin-top: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div
+        id="etm-widget-block"
+        data-sid="e510c89c83"
+        data-currency="RUB"
+        data-locale="RU"
+        data-url="https://aviatickets.tourist-tours.ru"
+>
+    <div id="etm-widget-app"></div>
+</div>
+<script src="https://new.etm-system.com/widget/app.min.js"></script>
+</body>
+</html>
