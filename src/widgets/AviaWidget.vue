@@ -4,9 +4,11 @@
         ref="iframeRef"
         src="/widget.html"
         class="etm-widget-iframe"
+        :class="{ 'iframe-expanded': isExpanded }"
         frameborder="0"
         scrolling="no"
-        @load="adjustHeight"
+        allow="geolocation"
+        @load="setupMessageListener"
     />
   </div>
 </template>
@@ -15,49 +17,57 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
+const isExpanded = ref(false)
 
-const adjustHeight = () => {
-  if (iframeRef.value) {
-    try {
-      const body = iframeRef.value.contentWindow?.document?.body
-      if (body) {
-        iframeRef.value.style.height = body.scrollHeight + 'px'
-      }
-    } catch (e) {
-      // Fallback если не можем получить доступ к содержимому
-      iframeRef.value.style.height = '350px'
-    }
+const handleMessage = (event: MessageEvent) => {
+  if (event.data?.type === 'etm-widget-state') {
+    // Виджет сообщает, открыт ли календарь/выпадающий список
+    isExpanded.value = event.data.isExpanded
+  }
+
+  if (event.data?.type === 'etm-widget-height' && iframeRef.value) {
+    // Динамическая высота контента
+    const height = event.data.height
+    iframeRef.value.style.height = height + 'px'
   }
 }
 
-let resizeObserver: ResizeObserver | null = null
+const setupMessageListener = () => {
+  window.addEventListener('message', handleMessage)
+}
 
 onMounted(() => {
-  // Подгоняем высоту при изменении размера окна
-  window.addEventListener('resize', adjustHeight)
-
-  // Повторная подгонка через небольшую задержку (виджет может загружаться)
-  setTimeout(adjustHeight, 1000)
-  setTimeout(adjustHeight, 2000)
+  window.addEventListener('message', handleMessage)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', adjustHeight)
+  window.removeEventListener('message', handleMessage)
 })
 </script>
 
 <style scoped>
 .etm-widget-iframe {
   width: 100%;
-  height: 350px;
+  height: 350px; /* Базовая высота */
   border: none;
   border-radius: 16px;
   overflow: hidden;
+  transition: height 0.3s ease;
+}
+
+/* Увеличенная высота когда открыт календарь */
+.etm-widget-iframe.iframe-expanded {
+  height: 800px !important;
+  overflow: visible;
 }
 
 @media screen and (max-width: 768px) {
   .etm-widget-iframe {
     height: 400px;
+  }
+
+  .etm-widget-iframe.iframe-expanded {
+    height: 900px !important;
   }
 }
 </style>
