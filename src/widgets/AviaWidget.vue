@@ -48,14 +48,13 @@ onUnmounted(() => {
 <style scoped>
 .etm-widget-iframe {
   width: 100%;
-  height: 350px; /* Базовая высота */
+  height: 350px;
   border: none;
   border-radius: 16px;
   overflow: hidden;
   transition: height 0.3s ease;
 }
 
-/* Увеличенная высота когда открыт календарь */
 .etm-widget-iframe.iframe-expanded {
   height: 800px !important;
   overflow: visible;
