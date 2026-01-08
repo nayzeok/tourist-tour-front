@@ -374,85 +374,108 @@ if (hotelError.value) {
     <div v-else class="grid lg:grid-cols-[1fr_400px] gap-6">
       <!-- Левая колонка -->
       <div class="flex flex-col gap-6">
-        <!-- Хедер с городом, датами и гостями -->
-        <div class="flex items-center justify-between bg-white rounded-2xl p-4">
-          <div class="flex items-center gap-4">
-            <div class="font-semibold">{{ cityName }}</div>
-            <div class="text-gray-600">{{ headerDates }}</div>
-            <div class="text-gray-600">{{ guestsLabel }}</div>
+        <!-- Блок бронирования отеля -->
+        <div class="bg-white rounded-2xl overflow-hidden">
+          <!-- Хедер с городом, датами и гостями -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-200">
+            <div class="flex items-center gap-3">
+              <UIcon name="i-lucide-bed" class="w-5 h-5 text-primary" />
+              <div class="font-semibold">{{ cityName }}</div>
+              <div class="text-gray-600">{{ headerDates }}</div>
+              <div class="text-gray-600">{{ guestsLabel }}</div>
+            </div>
+            <UButton
+              icon="i-lucide-arrow-up"
+              size="xs"
+              variant="ghost"
+              color="primary"
+              @click="goBack"
+            />
           </div>
-          <UButton
-            icon="i-lucide-arrow-up"
-            size="xs"
-            variant="ghost"
-            @click="goBack"
-          />
-        </div>
 
-        <!-- Информация об отеле -->
-        <div class="bg-white rounded-2xl p-4 relative overflow-hidden">
-          <div class="flex gap-4">
-            <div class="flex-1">
-              <div class="flex gap-1 mb-2">
-                <UIcon
-                  v-for="i in hotel?.property?.stars || 0"
-                  :key="i"
-                  class="w-4 h-4 text-yellow-500"
-                  name="i-heroicons-star-solid"
-                />
+          <!-- Основной контент -->
+          <div class="p-4">
+            <div class="flex gap-6">
+              <!-- Левая часть: информация об отеле и номере -->
+              <div class="flex-1 min-w-0">
+                <!-- Звезды рейтинга -->
+                <div class="flex gap-1 mb-2">
+                  <UIcon
+                    v-for="i in hotel?.property?.stars || 0"
+                    :key="i"
+                    class="w-4 h-4 text-yellow-500"
+                    name="i-heroicons-star-solid"
+                  />
+                </div>
+
+                <!-- Название отеля -->
+                <h1 class="text-xl font-semibold mb-2">
+                  {{ hotel?.property?.name }}
+                </h1>
+
+                <!-- Адрес -->
+                <p class="text-sm text-gray-600 mb-4">
+                  {{ hotel?.property?.address }}
+                </p>
+
+                <!-- Время заезда/выезда -->
+                <div class="space-y-1 text-sm text-gray-600 mb-4">
+                  <div>
+                    {{ checkInTime }}
+                  </div>
+                  <div>
+                    {{ checkOutTime }}
+                  </div>
+                </div>
+
+                <USeparator class="my-4" />
+
+                <!-- Информация о номере -->
+                <div class="flex gap-6">
+                  <div class="flex-1">
+                    <p class="text-sm text-gray-600 mb-2">
+                      1 номер для {{ adultCount }} взросл{{ adultCount === 1 ? 'ого' : 'ых' }} на {{ nightsCount }} {{ nightsCount === 1 ? 'ночь' : nightsCount < 5 ? 'ночи' : 'ночей' }}
+                    </p>
+                    <p class="text-sm text-gray-700 mb-4">
+                      {{ roomDescription }}
+                    </p>
+                    <button class="text-sm text-primary hover:underline">
+                      Подробнее о номере
+                    </button>
+                  </div>
+
+                  <!-- Политики бронирования справа от описания -->
+                  <div class="flex-shrink-0 space-y-2 min-w-[200px]">
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                      <UIcon name="i-lucide-utensils-crossed" class="w-4 h-4 flex-shrink-0" />
+                      <span>Питание не включено</span>
+                    </div>
+                    <div v-if="freeCancelDate" class="flex items-center gap-2 text-sm text-green-700">
+                      <UIcon name="i-lucide-info" class="w-4 h-4 flex-shrink-0" />
+                      <span class="text-xs">Бесплатная отмена до {{ freeCancelDate }} 11:59</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                      <UIcon name="i-lucide-credit-card" class="w-4 h-4 flex-shrink-0" />
+                      <span>Оплата онлайн</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h1 class="text-xl font-semibold mb-2">
-                {{ hotel?.property?.name }}
-              </h1>
-              <p class="text-sm text-gray-600 mb-4">
-                {{ hotel?.property?.address }}
-              </p>
-              <div class="flex flex-col gap-1 text-sm text-gray-600">
-                <span>{{ checkInTime }}</span>
-                <span>{{ checkOutTime }}</span>
+
+              <!-- Правая часть: фото номера -->
+              <div v-if="offer?.images?.[0]" class="flex-shrink-0">
+                <div class="relative w-32 h-32">
+                  <img
+                    :src="offer.images[0]"
+                    :alt="offer.roomTypeName"
+                    class="w-full h-full object-cover rounded-lg"
+                  >
+                  <span v-if="offer.images.length > 1" class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                    {{ offer.images.length }} фото
+                  </span>
+                </div>
               </div>
             </div>
-            <div v-if="offer?.images?.[0]" class="flex-shrink-0">
-              <div class="relative">
-                <img
-                  :src="offer.images[0]"
-                  :alt="offer.roomTypeName"
-                  class="w-24 h-24 object-cover rounded-lg"
-                >
-                <span v-if="offer.images.length > 1" class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                  {{ offer.images.length }} фото
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Детали номера -->
-        <div class="bg-white rounded-2xl p-4">
-          <p class="text-sm text-gray-600 mb-2">
-            1 номер для {{ adultCount }} взросл{{ adultCount === 1 ? 'ого' : 'ых' }} на {{ nightsCount }} {{ nightsCount === 1 ? 'ночь' : nightsCount < 5 ? 'ночи' : 'ночей' }}
-          </p>
-          <p class="text-sm text-gray-700 mb-2">
-            {{ roomDescription }}
-          </p>
-          <button class="text-sm text-primary hover:underline">
-            Подробнее о номере
-          </button>
-        </div>
-
-        <!-- Политики бронирования -->
-        <div class="bg-white rounded-2xl p-4">
-          <div class="flex items-center gap-2 text-sm text-gray-700 mb-2">
-            <UIcon name="i-lucide-utensils-crossed" class="w-4 h-4" />
-            <span>Питание не включено</span>
-          </div>
-          <div v-if="freeCancelDate" class="flex items-center gap-2 text-sm text-green-700 mb-2">
-            <UIcon name="i-lucide-info" class="w-4 h-4" />
-            <span>Бесплатная отмена до {{ freeCancelDate }} 11:59</span>
-          </div>
-          <div class="flex items-center gap-2 text-sm text-gray-700">
-            <UIcon name="i-lucide-credit-card" class="w-4 h-4" />
-            <span>Оплата онлайн</span>
           </div>
         </div>
 
