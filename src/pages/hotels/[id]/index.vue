@@ -1,7 +1,10 @@
 <script lang="ts" setup>
 import { hotelAmenities } from '~/src/shared/constants'
-import BookingModal from '~/src/entities/offer/BookingModal.vue'
 import type { RoomOffer } from '~/src/entities/offer/Offer.vue'
+
+definePageMeta({
+  layout: 'default',
+})
 
 const route = useRoute()
 const router = useRouter()
@@ -123,19 +126,16 @@ function goBack() {
   })
 }
 
-const bookingOffer = ref<RoomOffer | null>(null)
-const isBookingModalOpen = ref(false)
-
 function openBooking(option: RoomOffer) {
-  bookingOffer.value = option
-  isBookingModalOpen.value = true
+  router.push({
+    path: `/hotels/${propertyId.value}/booking`,
+    query: {
+      ...route.query,
+      ratePlanId: option.ratePlanId,
+      roomTypeId: option.roomTypeId,
+    },
+  })
 }
-
-watch(isBookingModalOpen, (value) => {
-  if (!value) {
-    bookingOffer.value = null
-  }
-})
 
 const allImages = computed(() => {
   const res = hotel.value.offers.reduce((acc, current) => {
@@ -339,15 +339,5 @@ const basis = computed(() => {
         </div>
       </div>
     </div>
-
-    <BookingModal
-      v-model:open="isBookingModalOpen"
-      :guests-count="guestsCount"
-      :hotel-name="hotel.property?.name"
-      :offer="bookingOffer"
-      :property-id="propertyId"
-      :stay="stayDates"
-      @success="refresh"
-    />
   </div>
 </template>
