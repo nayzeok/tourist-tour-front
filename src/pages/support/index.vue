@@ -42,8 +42,8 @@ const items: AccordionItem[] = [
             Телефон:
           </div>
 
-          <a class="font-light" href="tel:+74957974797">
-            +7 (495) 797-47-97
+          <a class="font-light" href="tel:88007003333">
+            8 (800) 700-33-33
           </a>
         </div>
 
@@ -68,8 +68,8 @@ const items: AccordionItem[] = [
             Телефон:
           </div>
 
-          <a class="font-light" href="tel:+88002342554">
-            8 (800) 234-25-54
+          <a class="font-light" href="tel:88007003333">
+            8 (800) 700-33-33
           </a>
         </div>
 

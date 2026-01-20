@@ -9,7 +9,7 @@ const openOferta = () => {
 <template>
   <div class="bg-white py-10">
     <div class="container px-4 lg:px-0">
-      <div class="flex justify-between flex-col gap-8 lg:flex-row ">
+      <div class="flex justify-between flex-col gap-8 lg:flex-row lg:items-start">
         <div class="flex flex-col gap-2">
           <NuxtLink class="flex items-center gap-2" to="/">
             <Icon name="c:logo-footer" size="70" />
@@ -98,6 +98,32 @@ const openOferta = () => {
 
           <div class="text-gray-500 text-xs">
             Это удобнее
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 text-sm min-w-[200px] lg:min-w-[240px]">
+          <div class="text-sm mb-1">
+            Юридическая информация
+          </div>
+          <div class="text-gray-600 text-xs">
+            Партнер: Компания "Турист-Тур"
+          </div>
+          <div class="text-gray-600 text-xs">
+            ООО "АТМ-ГРУПП"
+          </div>
+          <div class="text-gray-600 text-xs">
+            ИНН: 5405059146
+          </div>
+          <div class="text-gray-600 text-xs">
+            КПП: 540501001
+          </div>
+          <div class="text-gray-600 text-xs">
+            ОГРН: 1205400052912
+          </div>
+          <div class="text-gray-600 text-xs leading-relaxed">
+            630008, Новосибирская область,<br>
+            г. о. город Новосибирск,<br>
+            г. Новосибирск, ул. Кирова, д. 11
           </div>
         </div>
         
