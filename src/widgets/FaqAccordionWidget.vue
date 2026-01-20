@@ -105,14 +105,10 @@ const items: AccordionItem[] = [
             Авиабилеты:
           </div>
 
-          <a class="font-light" href="tel:+74957974797">
-            +7 (495) 797-47-97
+          <a class="font-light" href="tel:88007003333">
+            8 (800) 700-33-33
           </a>
         </div>
-
-        <a class="font-light" href="mailto:support@agent.ru">
-          support@agent.ru
-        </a>
       </div>
 
       <div class="flex flex-col gap-1">
@@ -121,14 +117,10 @@ const items: AccordionItem[] = [
             Отели:
           </div>
 
-          <a class="font-light" href="tel:88003003767">
-            8 (800) 300-37-67
+          <a class="font-light" href="tel:88007003333">
+            8 (800) 700-33-33
           </a>
         </div>
-
-        <a class="font-light" href="mailto:help@tourist-tours.ru">
-          help@tourist-tours.ru
-        </a>
       </div>
     </div>
   </div>

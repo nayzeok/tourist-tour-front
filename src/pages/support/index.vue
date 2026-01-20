@@ -46,16 +46,6 @@ const items: AccordionItem[] = [
             8 (800) 700-33-33
           </a>
         </div>
-
-        <div class="flex items-center gap-2">
-          <div class="font-bold">
-            Email:
-          </div>
-
-          <a class="font-light" href="mailto:support@agent.ru">
-            support@agent.ru
-          </a>
-        </div>
       </div>
 
       <div class="flex flex-col gap-1">
@@ -70,16 +60,6 @@ const items: AccordionItem[] = [
 
           <a class="font-light" href="tel:88007003333">
             8 (800) 700-33-33
-          </a>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <div class="font-bold">
-            Email:
-          </div>
-
-          <a class="font-light" href="mailto:bro@bronevik.com">
-            bro@bronevik.com
           </a>
         </div>
       </div>
