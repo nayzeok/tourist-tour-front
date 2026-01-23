@@ -234,6 +234,81 @@ const freeCancelDate = computed(() => {
   return formatDisplayDate(arrival.toISOString().split('T')[0])
 })
 
+const formatPenaltyDeadline = (deadline?: string | null) => {
+  if (!deadline) return ''
+  
+  try {
+    const date = new Date(deadline)
+    if (isNaN(date.getTime())) return deadline
+    
+    return date.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return deadline
+  }
+}
+
+const cancellationInfo = computed(() => {
+  const hasPenalty = offer.value?.cancellationPenaltyAmount != null && offer.value.cancellationPenaltyAmount > 0
+  const penaltyDeadline = offer.value?.cancellationPenaltyDeadline
+  const penaltyAmount = offer.value?.cancellationPenaltyAmount
+  const penaltyCurrency = offer.value?.cancellationPenaltyCurrency || 'RUB'
+  
+  if (offer.value?.freeCancel) {
+    const freeCancelText = typeof offer.value.freeCancel === 'string' 
+      ? offer.value.freeCancel 
+      : freeCancelDate.value 
+        ? `до ${freeCancelDate.value} 11:59`
+        : 'бесплатно'
+    
+    let text = `Бесплатная отмена ${freeCancelText}`
+    
+    if (hasPenalty && penaltyDeadline) {
+      const formattedDeadline = formatPenaltyDeadline(penaltyDeadline)
+      const formattedAmount = typeof penaltyAmount === 'number' 
+        ? penaltyAmount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
+        : penaltyAmount
+      const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
+      text += `. Штраф ${formattedAmount} ${currencySymbol} после ${formattedDeadline}`
+    }
+    
+    return {
+      text,
+      isPositive: true,
+    }
+  }
+  
+  if (hasPenalty) {
+    const formattedDeadline = penaltyDeadline ? formatPenaltyDeadline(penaltyDeadline) : ''
+    const formattedAmount = typeof penaltyAmount === 'number' 
+      ? penaltyAmount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
+      : penaltyAmount
+    const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
+    
+    let text = `Штраф ${formattedAmount} ${currencySymbol}`
+    if (formattedDeadline) {
+      text += ` после ${formattedDeadline}`
+    } else {
+      text += ' при отмене'
+    }
+    
+    return {
+      text,
+      isPositive: false,
+    }
+  }
+  
+  return {
+    text: 'Без бесплатной отмены',
+    isPositive: false,
+  }
+})
+
 function resolveErrorMessage(error: unknown) {
   const fallback = 'Не удалось создать бронирование. Попробуйте ещё раз.'
 
@@ -450,9 +525,13 @@ if (hotelError.value) {
                       <UIcon name="i-lucide-utensils-crossed" class="w-4 h-4 flex-shrink-0" />
                       <span>Питание не включено</span>
                     </div>
-                    <div v-if="freeCancelDate" class="flex items-center gap-2 text-sm text-green-700">
-                      <UIcon name="i-lucide-info" class="w-4 h-4 flex-shrink-0" />
-                      <span class="text-xs">Бесплатная отмена до {{ freeCancelDate }} 11:59</span>
+                    <div 
+                      v-if="cancellationInfo.text" 
+                      class="flex items-start gap-2 text-sm"
+                      :class="cancellationInfo.isPositive ? 'text-green-700' : 'text-orange-700'"
+                    >
+                      <UIcon name="i-lucide-info" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span class="text-xs leading-relaxed">{{ cancellationInfo.text }}</span>
                     </div>
                     <div class="flex items-center gap-2 text-sm text-gray-700">
                       <UIcon name="i-lucide-credit-card" class="w-4 h-4 flex-shrink-0" />
@@ -532,9 +611,18 @@ if (hotelError.value) {
           <h2 class="font-semibold mb-4">Информация о заезде</h2>
           <div class="mb-4">
             <label class="text-sm font-medium text-gray-700 mb-1 block">Время заезда</label>
-            <USelect
+            <USelectMenu
               v-model="form.arrivalTime"
-              :options="['Неизвестно', '14:00', '15:00', '16:00', '17:00', '18:00']"
+              :items="[
+                { label: 'Неизвестно', value: 'Неизвестно' },
+                { label: '14:00', value: '14:00' },
+                { label: '15:00', value: '15:00' },
+                { label: '16:00', value: '16:00' },
+                { label: '17:00', value: '17:00' },
+                { label: '18:00', value: '18:00' }
+              ]"
+              option-attribute="label"
+              value-attribute="value"
             />
           </div>
           <p class="text-sm text-gray-600 mb-4">

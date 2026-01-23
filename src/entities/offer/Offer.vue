@@ -10,13 +10,16 @@ export type RoomOffer = {
   roomTypeId: string
   roomTypeName: string
   mealLabel?: string
-  freeCancel?: boolean
+  freeCancel?: boolean | string
   price: { total: number; perNight: number; currency: string }
   images: string[]
   addressLine?: string
   ratePlanId: string
   amenities?: Amenity[]
   availability?: number
+  cancellationPenaltyAmount?: number | null
+  cancellationPenaltyDeadline?: string | null
+  cancellationPenaltyCurrency?: string
   [key: string]: unknown
 }
 

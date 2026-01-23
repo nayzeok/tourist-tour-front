@@ -84,19 +84,77 @@ const mealBadge = computed(() => {
   }
 })
 
+const formatPenaltyDeadline = (deadline?: string | null) => {
+  if (!deadline) return ''
+  
+  try {
+    const date = new Date(deadline)
+    if (isNaN(date.getTime())) return deadline
+    
+    return date.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return deadline
+  }
+}
+
 const cancelBadge = computed(() => {
+  const hasPenalty = props.hotel.cancellationPenaltyAmount != null && props.hotel.cancellationPenaltyAmount > 0
+  const penaltyDeadline = props.hotel.cancellationPenaltyDeadline
+  const penaltyAmount = props.hotel.cancellationPenaltyAmount
+  const penaltyCurrency = props.hotel.cancellationPenaltyCurrency || '₽'
+  
   if (props.hotel.freeCancel) {
     // true | "до 12.10.2025"
     const tail =
       typeof props.hotel.freeCancel === 'string'
         ? ` ${props.hotel.freeCancel}`
         : ''
+    
+    let text = `Беспл. отмена${tail}`
+    
+    // Если есть штраф после дедлайна, добавляем информацию о нем
+    if (hasPenalty && penaltyDeadline) {
+      const formattedDeadline = formatPenaltyDeadline(penaltyDeadline)
+      const formattedAmount = typeof penaltyAmount === 'number' 
+        ? formatPrice(penaltyAmount)
+        : penaltyAmount
+      const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
+      text += `. Штраф ${formattedAmount} ${currencySymbol} после ${formattedDeadline}`
+    }
+    
     return {
-      text: `Беспл. отмена${tail}`,
+      text,
       positive: true,
       icon: 'i-lucide-rotate-ccw',
     }
   }
+  
+  // Если нет бесплатной отмены, но есть штраф
+  if (hasPenalty) {
+    const formattedDeadline = penaltyDeadline ? formatPenaltyDeadline(penaltyDeadline) : ''
+    const formattedAmount = typeof penaltyAmount === 'number' 
+      ? formatPrice(penaltyAmount)
+      : penaltyAmount
+    const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
+    
+    let text = `Штраф ${formattedAmount} ${currencySymbol}`
+    if (formattedDeadline) {
+      text += ` после ${formattedDeadline}`
+    }
+    
+    return {
+      text,
+      positive: false,
+      icon: 'i-lucide-rotate-ccw',
+    }
+  }
+  
   return {
     text: 'Без беспл. отмены',
     positive: false,

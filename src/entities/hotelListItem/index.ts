@@ -29,4 +29,7 @@ export interface Hotel {
   checkInTime?: string // "14:00"
   checkOutTime?: string // "12:00"
   timeZone?: string // "Europe/London"
+  cancellationPenaltyAmount?: number | null // размер штрафа
+  cancellationPenaltyDeadline?: string | null // после какого времени начисляется штраф
+  cancellationPenaltyCurrency?: string // валюта штрафа
 }
