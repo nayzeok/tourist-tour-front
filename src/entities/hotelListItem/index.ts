@@ -26,4 +26,7 @@ export interface Hotel {
   left?: number
   rating?: number
   reviewsCount?: number
+  checkInTime?: string // "14:00"
+  checkOutTime?: string // "12:00"
+  timeZone?: string // "Europe/London"
 }

@@ -24,6 +24,49 @@ const apiParams = computed(() => {
 const formatPrice = (n?: number) =>
   typeof n === 'number' ? n.toLocaleString('ru-RU') : ''
 
+const formatTimeWithTimezone = (time?: string, timeZone?: string) => {
+  if (!time) return ''
+  
+  if (!timeZone) {
+    return time
+  }
+  
+  try {
+    // Создаем дату с указанным временем
+    const [hours, minutes] = time.split(':')
+    const now = new Date()
+    const date = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      Number(hours) || 0,
+      Number(minutes) || 0,
+      0
+    ))
+    
+    // Получаем короткое название часового пояса (например, MSK, GMT+3)
+    const formatter = new Intl.DateTimeFormat('ru-RU', {
+      timeZone,
+      timeZoneName: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    
+    const parts = formatter.formatToParts(date)
+    const tzName = parts.find(part => part.type === 'timeZoneName')?.value || ''
+    
+    // Если получили название часового пояса, добавляем его
+    if (tzName) {
+      return `${time} ${tzName}`
+    }
+    
+    return time
+  } catch {
+    // Если не удалось определить часовой пояс, просто возвращаем время
+    return time
+  }
+}
+
 const mealBadge = computed(() => {
   // если пришёл явный ярлык питания (например, "Завтрак")
   if (props.hotel.mealLabel) {
@@ -248,6 +291,22 @@ function goToHotel() {
                 <UIcon class="w-4 h-4 text-gray-600" :name="paymentBadge.icon" />
                 <span class="truncate">{{ paymentBadge.text }}</span>
               </div>
+
+              <!-- время заезда/выезда -->
+              <div v-if="hotel.checkInTime || hotel.checkOutTime" class="flex items-center gap-1.5 text-gray-700 text-xs">
+                <UIcon class="w-4 h-4 text-gray-600" name="i-lucide-clock" />
+                <span class="truncate">
+                  <template v-if="hotel.checkInTime && hotel.checkOutTime">
+                    Заезд {{ formatTimeWithTimezone(hotel.checkInTime, hotel.timeZone) }}, выезд {{ formatTimeWithTimezone(hotel.checkOutTime, hotel.timeZone) }}
+                  </template>
+                  <template v-else-if="hotel.checkInTime">
+                    Заезд {{ formatTimeWithTimezone(hotel.checkInTime, hotel.timeZone) }}
+                  </template>
+                  <template v-else-if="hotel.checkOutTime">
+                    Выезд {{ formatTimeWithTimezone(hotel.checkOutTime, hotel.timeZone) }}
+                  </template>
+                </span>
+              </div>
             </div>
           </div>
 
@@ -294,6 +353,21 @@ function goToHotel() {
             <p class="mt-2 text-gray-500 text-xs">
               {{ hotel.address }}
             </p>
+
+            <div v-if="hotel.checkInTime || hotel.checkOutTime" class="mt-1 text-gray-600 text-xs flex items-center gap-1">
+              <UIcon class="w-3 h-3" name="i-lucide-clock" />
+              <span>
+                <template v-if="hotel.checkInTime && hotel.checkOutTime">
+                  Заезд {{ formatTimeWithTimezone(hotel.checkInTime, hotel.timeZone) }}, выезд {{ formatTimeWithTimezone(hotel.checkOutTime, hotel.timeZone) }}
+                </template>
+                <template v-else-if="hotel.checkInTime">
+                  Заезд {{ formatTimeWithTimezone(hotel.checkInTime, hotel.timeZone) }}
+                </template>
+                <template v-else-if="hotel.checkOutTime">
+                  Выезд {{ formatTimeWithTimezone(hotel.checkOutTime, hotel.timeZone) }}
+                </template>
+              </span>
+            </div>
           </div>
 
           <div v-if="hotel.rating || hotel.reviewsCount" class="flex items-center gap-2">
