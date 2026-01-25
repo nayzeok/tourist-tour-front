@@ -26,37 +26,37 @@ const apiParams = computed(() => {
   }
 })
 
+// Уникальный ключ для кэширования, включающий все параметры запроса
+const cacheKey = computed(() => {
+  const { cityId, dates, adultCount, childAges } = apiParams.value
+  return `offer-${route.params.id}-${cityId}-${dates}-${adultCount}-${childAges || ''}`
+})
+
 const {
   data: hotel,
   status,
   refresh,
-} = await useAsyncData<any>(`${route.params.id}`, async () => {
-  // const { cityId, dates, adultCount, childAges } = apiParams.value
-  //
-  // if (!cityId || !dates) {
-  //   return Promise.resolve([])
-  // }
-  //
-  // const params = new URLSearchParams({
-  //   cityId,
-  //   dates,
-  //   ...(adultCount && { adultCount }),
-  //   ...(childAges && { childAges }),
-  // })
+} = await useAsyncData<any>(
+  cacheKey.value,
+  async () => {
+    const { cityId, dates, adultCount, childAges } = apiParams.value
 
-  const { cityId, dates, adultCount, childAges } = apiParams.value
+    const params = new URLSearchParams({
+      cityId,
+      dates,
+      ...(adultCount && { adultCount }),
+      ...(childAges && { childAges }),
+    })
 
-  const params = new URLSearchParams({
-    cityId,
-    dates,
-    ...(adultCount && { adultCount }),
-    ...(childAges && { childAges }),
-  })
-
-  return $fetch(
-    `${useRuntimeConfig().public.apiUrl}/offer/${route.params.id}?${params.toString()}`
-  )
-})
+    return $fetch(
+      `${useRuntimeConfig().public.apiUrl}/offer/${route.params.id}?${params.toString()}`
+    )
+  },
+  {
+    // Предотвращаем дублирование запросов при одновременных вызовах
+    dedupe: 'defer',
+  }
+)
 
 function parseDateSegment(date?: string | null) {
   if (!date) {

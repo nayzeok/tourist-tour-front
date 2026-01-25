@@ -67,30 +67,43 @@ const stayDates = computed(() => {
   return { arrival, departure }
 })
 
+// Уникальный ключ для кэширования, включающий все параметры запроса
+const bookingCacheKey = computed(() => {
+  const cityId = route.query.cityId as string || ''
+  return `booking-${propertyId.value}-${cityId}-${dates.value}-${adultCount.value}-${childAges.value.join(',')}`
+})
+
 // Загружаем данные отеля и предложения
 const {
   data: hotel,
   status,
   error: hotelError,
-} = await useAsyncData<any>(`hotel-${propertyId.value}`, async () => {
-  if (!dates.value) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Отсутствуют даты для бронирования',
+} = await useAsyncData<any>(
+  bookingCacheKey.value,
+  async () => {
+    if (!dates.value) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Отсутствуют даты для бронирования',
+      })
+    }
+
+    const params = new URLSearchParams({
+      cityId: route.query.cityId as string || '',
+      dates: dates.value,
+      ...(adultCount.value && { adultCount: String(adultCount.value) }),
+      ...(childAges.value.length && { childAges: childAges.value.join(',') }),
     })
+
+    return $fetch(
+      `${runtimeConfig.public.apiUrl}/offer/${propertyId.value}?${params.toString()}`
+    )
+  },
+  {
+    // Предотвращаем дублирование запросов при одновременных вызовах
+    dedupe: 'defer',
   }
-
-  const params = new URLSearchParams({
-    cityId: route.query.cityId as string || '',
-    dates: dates.value,
-    ...(adultCount.value && { adultCount: String(adultCount.value) }),
-    ...(childAges.value.length && { childAges: childAges.value.join(',') }),
-  })
-
-  return $fetch(
-    `${runtimeConfig.public.apiUrl}/offer/${propertyId.value}?${params.toString()}`
-  )
-})
+)
 
 // Находим нужное предложение
 const offer = computed<RoomOffer | null>(() => {
