@@ -89,48 +89,104 @@ const mealBadge = computed(() => {
   }
 })
 
-const formatPenaltyDeadline = (deadline?: string | null) => {
-  if (!deadline) return ''
+/**
+ * Форматирует дедлайн отмены с датой, временем и часовым поясом
+ */
+const formatCancellationDeadline = (deadlineLocal?: string | null, timeZone?: string) => {
+  if (!deadlineLocal) return ''
   
   try {
-    const date = new Date(deadline)
-    if (isNaN(date.getTime())) return deadline
+    const date = new Date(deadlineLocal)
+    if (isNaN(date.getTime())) return deadlineLocal
     
-    return date.toLocaleDateString('ru-RU', {
+    // Форматируем дату и время
+    const dateStr = date.toLocaleDateString('ru-RU', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
+    })
+    
+    const timeStr = date.toLocaleTimeString('ru-RU', {
       hour: '2-digit',
       minute: '2-digit',
     })
+    
+    // Получаем название часового пояса
+    let tzStr = ''
+    if (timeZone) {
+      try {
+        const formatter = new Intl.DateTimeFormat('ru-RU', {
+          timeZone,
+          timeZoneName: 'short',
+        })
+        const parts = formatter.formatToParts(date)
+        tzStr = parts.find(part => part.type === 'timeZoneName')?.value || ''
+      } catch {
+        // Игнорируем ошибки форматирования
+      }
+    }
+    
+    return tzStr ? `${dateStr} ${timeStr} ${tzStr}` : `${dateStr} ${timeStr}`
   } catch {
-    return deadline
+    return deadlineLocal
   }
 }
 
+/**
+ * Получает символ валюты
+ */
+const getCurrencySymbol = (currency?: string) => {
+  const symbols: Record<string, string> = {
+    RUB: '₽',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+  }
+  return symbols[currency || 'RUB'] || currency || '₽'
+}
+
+/**
+ * Бейдж политики отмены с полной информацией
+ * 
+ * Сценарии:
+ * 1) 100% бесплатная отмена - freeCancellationPossible=true, deadline=null, penalty=null
+ * 2) Бесплатно до даты, потом штраф - freeCancellationPossible=true, deadline заполнен, penalty заполнен
+ * 3) Отмена всегда платная - freeCancellationPossible=false, penalty заполнен
+ */
 const cancelBadge = computed(() => {
-  const hasPenalty = props.hotel.cancellationPenaltyAmount != null && props.hotel.cancellationPenaltyAmount > 0
-  const penaltyDeadline = props.hotel.cancellationPenaltyDeadline
-  const penaltyAmount = props.hotel.cancellationPenaltyAmount
-  const penaltyCurrency = props.hotel.cancellationPenaltyCurrency || '₽'
+  const policy = props.hotel.cancellationPolicy
+  const timeZone = props.hotel.timeZone
   
-  if (props.hotel.freeCancel) {
-    // true | "до 12.10.2025"
-    const tail =
-      typeof props.hotel.freeCancel === 'string'
-        ? ` ${props.hotel.freeCancel}`
-        : ''
+  if (!policy) {
+    return {
+      text: 'Условия отмены уточняйте',
+      positive: false,
+      icon: 'i-lucide-rotate-ccw',
+    }
+  }
+  
+  const { freeCancellationPossible, freeCancellationDeadlineLocal, penaltyAmount, penaltyCurrency } = policy
+  const hasPenalty = penaltyAmount != null && penaltyAmount > 0
+  const hasDeadline = !!freeCancellationDeadlineLocal
+  const currencySymbol = getCurrencySymbol(penaltyCurrency)
+  
+  // Сценарий 1: 100% бесплатная отмена (без дедлайна и штрафа)
+  if (freeCancellationPossible && !hasDeadline && !hasPenalty) {
+    return {
+      text: 'Бесплатная отмена в любое время',
+      positive: true,
+      icon: 'i-lucide-rotate-ccw',
+    }
+  }
+  
+  // Сценарий 2: Бесплатно до даты, потом штраф
+  if (freeCancellationPossible && hasDeadline) {
+    const formattedDeadline = formatCancellationDeadline(freeCancellationDeadlineLocal, timeZone)
     
-    let text = `Беспл. отмена${tail}`
+    let text = `Бесплатная отмена до ${formattedDeadline}`
     
-    // Если есть штраф после дедлайна, добавляем информацию о нем
-    if (hasPenalty && penaltyDeadline) {
-      const formattedDeadline = formatPenaltyDeadline(penaltyDeadline)
-      const formattedAmount = typeof penaltyAmount === 'number' 
-        ? formatPrice(penaltyAmount)
-        : penaltyAmount
-      const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
-      text += `. Штраф ${formattedAmount} ${currencySymbol} после ${formattedDeadline}`
+    if (hasPenalty) {
+      text += `, далее штраф ${formatPrice(penaltyAmount)} ${currencySymbol}`
     }
     
     return {
@@ -140,28 +196,18 @@ const cancelBadge = computed(() => {
     }
   }
   
-  // Если нет бесплатной отмены, но есть штраф
-  if (hasPenalty) {
-    const formattedDeadline = penaltyDeadline ? formatPenaltyDeadline(penaltyDeadline) : ''
-    const formattedAmount = typeof penaltyAmount === 'number' 
-      ? formatPrice(penaltyAmount)
-      : penaltyAmount
-    const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
-    
-    let text = `Штраф ${formattedAmount} ${currencySymbol}`
-    if (formattedDeadline) {
-      text += ` после ${formattedDeadline}`
-    }
-    
+  // Сценарий 3: Отмена всегда платная
+  if (!freeCancellationPossible && hasPenalty) {
     return {
-      text,
+      text: `Отмена платная: штраф ${formatPrice(penaltyAmount)} ${currencySymbol}`,
       positive: false,
       icon: 'i-lucide-rotate-ccw',
     }
   }
   
+  // Фоллбэк
   return {
-    text: 'Без беспл. отмены',
+    text: 'Без бесплатной отмены',
     positive: false,
     icon: 'i-lucide-rotate-ccw',
   }

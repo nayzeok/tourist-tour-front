@@ -231,21 +231,15 @@ const roomDescription = computed(() => {
   return 'Стандартный номер с двумя раздельными кроватями, низкий этаж'
 })
 
-const freeCancelDate = computed(() => {
-  if (!stayDates.value || !offer.value?.freeCancel) {
-    return null
-  }
-  const arrival = new Date(stayDates.value.arrival)
-  arrival.setDate(arrival.getDate() - 1)
-  return formatDisplayDate(arrival.toISOString().split('T')[0])
-})
-
-const formatPenaltyDeadline = (deadline?: string | null) => {
-  if (!deadline) return ''
+/**
+ * Форматирует дедлайн с датой, временем и часовым поясом
+ */
+const formatCancellationDeadline = (deadlineLocal?: string | null) => {
+  if (!deadlineLocal) return ''
   
   try {
-    const date = new Date(deadline)
-    if (isNaN(date.getTime())) return deadline
+    const date = new Date(deadlineLocal)
+    if (isNaN(date.getTime())) return deadlineLocal
     
     return date.toLocaleDateString('ru-RU', {
       day: '2-digit',
@@ -255,32 +249,51 @@ const formatPenaltyDeadline = (deadline?: string | null) => {
       minute: '2-digit',
     })
   } catch {
-    return deadline
+    return deadlineLocal
   }
 }
 
+const getCurrencySymbol = (currency?: string) => {
+  const symbols: Record<string, string> = { RUB: '₽', USD: '$', EUR: '€', GBP: '£' }
+  return symbols[currency || 'RUB'] || currency || '₽'
+}
+
+/**
+ * Информация о политике отмены для страницы бронирования
+ */
 const cancellationInfo = computed(() => {
-  const hasPenalty = offer.value?.cancellationPenaltyAmount != null && offer.value.cancellationPenaltyAmount > 0
-  const penaltyDeadline = offer.value?.cancellationPenaltyDeadline
-  const penaltyAmount = offer.value?.cancellationPenaltyAmount
-  const penaltyCurrency = offer.value?.cancellationPenaltyCurrency || 'RUB'
+  const policy = offer.value?.cancellationPolicy
   
-  if (offer.value?.freeCancel) {
-    const freeCancelText = typeof offer.value.freeCancel === 'string' 
-      ? offer.value.freeCancel 
-      : freeCancelDate.value 
-        ? `до ${freeCancelDate.value} 11:59`
-        : 'бесплатно'
+  if (!policy) {
+    return {
+      text: 'Условия отмены уточняйте при бронировании',
+      isPositive: false,
+    }
+  }
+  
+  const { freeCancellationPossible, freeCancellationDeadlineLocal, penaltyAmount, penaltyCurrency } = policy
+  const hasPenalty = penaltyAmount != null && penaltyAmount > 0
+  const hasDeadline = !!freeCancellationDeadlineLocal
+  const currencySymbol = getCurrencySymbol(penaltyCurrency)
+  const formattedAmount = hasPenalty 
+    ? penaltyAmount!.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
+    : ''
+  
+  // Сценарий 1: 100% бесплатная отмена
+  if (freeCancellationPossible && !hasDeadline && !hasPenalty) {
+    return {
+      text: 'Бесплатная отмена в любое время',
+      isPositive: true,
+    }
+  }
+  
+  // Сценарий 2: Бесплатно до даты, потом штраф
+  if (freeCancellationPossible && hasDeadline) {
+    const formattedDeadline = formatCancellationDeadline(freeCancellationDeadlineLocal)
     
-    let text = `Бесплатная отмена ${freeCancelText}`
-    
-    if (hasPenalty && penaltyDeadline) {
-      const formattedDeadline = formatPenaltyDeadline(penaltyDeadline)
-      const formattedAmount = typeof penaltyAmount === 'number' 
-        ? penaltyAmount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
-        : penaltyAmount
-      const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
-      text += `. Штраф ${formattedAmount} ${currencySymbol} после ${formattedDeadline}`
+    let text = `Бесплатная отмена до ${formattedDeadline}`
+    if (hasPenalty) {
+      text += `. После этого времени штраф ${formattedAmount} ${currencySymbol}`
     }
     
     return {
@@ -289,22 +302,10 @@ const cancellationInfo = computed(() => {
     }
   }
   
-  if (hasPenalty) {
-    const formattedDeadline = penaltyDeadline ? formatPenaltyDeadline(penaltyDeadline) : ''
-    const formattedAmount = typeof penaltyAmount === 'number' 
-      ? penaltyAmount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
-      : penaltyAmount
-    const currencySymbol = penaltyCurrency === 'RUB' ? '₽' : penaltyCurrency
-    
-    let text = `Штраф ${formattedAmount} ${currencySymbol}`
-    if (formattedDeadline) {
-      text += ` после ${formattedDeadline}`
-    } else {
-      text += ' при отмене'
-    }
-    
+  // Сценарий 3: Отмена всегда платная
+  if (!freeCancellationPossible && hasPenalty) {
     return {
-      text,
+      text: `Отмена платная. Штраф при отмене: ${formattedAmount} ${currencySymbol}`,
       isPositive: false,
     }
   }

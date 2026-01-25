@@ -9,6 +9,14 @@ export interface HotelCoordinates {
   lon?: number
 }
 
+export interface CancellationPolicy {
+  freeCancellationPossible: boolean
+  freeCancellationDeadlineLocal?: string | null // "2025-08-19T17:41"
+  freeCancellationDeadlineUtc?: string | null // "2025-08-19T14:41Z"
+  penaltyAmount?: number | null
+  penaltyCurrency?: string // RUB, USD и т.д.
+}
+
 export interface Hotel {
   id: string
   name: string
@@ -19,7 +27,6 @@ export interface Hotel {
   amenities?: string[] // коды для иконок
   roomName?: string
   mealLabel?: string | null
-  freeCancel?: boolean | string // true | "до 12.10.2025" | false
   payOnSite?: boolean
   price?: HotelPrice
   guestsNote?: string
@@ -29,7 +36,5 @@ export interface Hotel {
   checkInTime?: string // "14:00"
   checkOutTime?: string // "12:00"
   timeZone?: string // "Europe/London"
-  cancellationPenaltyAmount?: number | null // размер штрафа
-  cancellationPenaltyDeadline?: string | null // после какого времени начисляется штраф
-  cancellationPenaltyCurrency?: string // валюта штрафа
+  cancellationPolicy?: CancellationPolicy
 }

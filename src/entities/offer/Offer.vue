@@ -7,20 +7,25 @@ export type Amenity = {
   name?: string
 }
 
+export type CancellationPolicy = {
+  freeCancellationPossible: boolean
+  freeCancellationDeadlineLocal?: string | null
+  freeCancellationDeadlineUtc?: string | null
+  penaltyAmount?: number | null
+  penaltyCurrency?: string
+}
+
 export type RoomOffer = {
   roomTypeId: string
   roomTypeName: string
   mealLabel?: string
-  freeCancel?: boolean | string
   price: { total: number; perNight: number; currency: string }
   images: string[]
   addressLine?: string
   ratePlanId: string
   amenities?: Amenity[]
   availability?: number
-  cancellationPenaltyAmount?: number | null
-  cancellationPenaltyDeadline?: string | null
-  cancellationPenaltyCurrency?: string
+  cancellationPolicy?: CancellationPolicy
   [key: string]: unknown
 }
 
@@ -57,11 +62,55 @@ const mealBadge = computed(() => {
   }
 })
 
+const formatPrice = (n?: number | null) =>
+  typeof n === 'number' ? n.toLocaleString('ru-RU') : ''
+
+const getCurrencySymbol = (currency?: string) => {
+  const symbols: Record<string, string> = { RUB: '₽', USD: '$', EUR: '€', GBP: '£' }
+  return symbols[currency || 'RUB'] || currency || '₽'
+}
+
 const cancelBadge = computed(() => {
-  if (primaryOffer.value?.freeCancel) {
+  const policy = primaryOffer.value?.cancellationPolicy
+  
+  if (!policy) {
+    return {
+      text: 'Условия отмены уточняйте',
+      positive: false,
+      icon: 'i-lucide-rotate-ccw',
+    }
+  }
+  
+  const { freeCancellationPossible, freeCancellationDeadlineLocal, penaltyAmount, penaltyCurrency } = policy
+  const hasPenalty = penaltyAmount != null && penaltyAmount > 0
+  const hasDeadline = !!freeCancellationDeadlineLocal
+  const currencySymbol = getCurrencySymbol(penaltyCurrency)
+  
+  // 100% бесплатная отмена
+  if (freeCancellationPossible && !hasDeadline && !hasPenalty) {
     return {
       text: 'Бесплатная отмена',
       positive: true,
+      icon: 'i-lucide-rotate-ccw',
+    }
+  }
+  
+  // Бесплатно до даты
+  if (freeCancellationPossible && hasDeadline) {
+    return {
+      text: hasPenalty 
+        ? `Бесплатная отмена, далее ${formatPrice(penaltyAmount)} ${currencySymbol}`
+        : 'Бесплатная отмена до дедлайна',
+      positive: true,
+      icon: 'i-lucide-rotate-ccw',
+    }
+  }
+  
+  // Всегда платная
+  if (!freeCancellationPossible && hasPenalty) {
+    return {
+      text: `Штраф ${formatPrice(penaltyAmount)} ${currencySymbol}`,
+      positive: false,
       icon: 'i-lucide-rotate-ccw',
     }
   }
