@@ -2,6 +2,7 @@
 import type { FetchError } from 'ofetch'
 import type { RoomOffer } from '~/src/entities/offer/Offer.vue'
 import { useAuthStore, useCitiesStore } from '~/src/shared/store'
+import { useImageUrl } from '~/src/shared/utils/imageUrl'
 
 definePageMeta({
   layout: 'default',
@@ -101,6 +102,11 @@ const offer = computed<RoomOffer | null>(() => {
     (o: RoomOffer) => o.ratePlanId === ratePlanId.value
   ) || null
 })
+
+// Преобразуем URL изображений для работы с API proxy
+const { getImageUrl, getImageUrls } = useImageUrl()
+const offerImages = computed(() => getImageUrls(offer.value?.images))
+const offerPrimaryImage = computed(() => getImageUrl(offer.value?.images?.[0]))
 
 // Проверяем наличие предложения после загрузки
 watch([hotel, ratePlanId], () => {
@@ -542,15 +548,15 @@ if (hotelError.value) {
               </div>
 
               <!-- Правая часть: фото номера -->
-              <div v-if="offer?.images?.[0]" class="flex-shrink-0">
+              <div v-if="offerPrimaryImage" class="flex-shrink-0">
                 <div class="relative w-32 h-32">
                   <img
-                    :src="offer.images[0]"
-                    :alt="offer.roomTypeName"
+                    :src="offerPrimaryImage"
+                    :alt="offer?.roomTypeName"
                     class="w-full h-full object-cover rounded-lg"
                   >
-                  <span v-if="offer.images.length > 1" class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                    {{ offer.images.length }} фото
+                  <span v-if="offerImages.length > 1" class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                    {{ offerImages.length }} фото
                   </span>
                 </div>
               </div>

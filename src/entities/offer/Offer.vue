@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { hotelAmenities } from '~/src/shared/constants/index.js'
+import { useImageUrl } from '~/src/shared/utils/imageUrl'
 
 export type Amenity = {
   code: string
@@ -32,6 +33,11 @@ const emit = defineEmits<{
 const galleryOpen = ref(false)
 
 const primaryOffer = computed(() => props.offer?.[0])
+
+// Преобразуем URL изображений для работы с API proxy
+const { getImageUrl, getImageUrls } = useImageUrl()
+const offerImages = computed(() => getImageUrls(primaryOffer.value?.images))
+const primaryImage = computed(() => getImageUrl(primaryOffer.value?.images?.[0]))
 
 const mealBadge = computed(() => {
   const label = primaryOffer.value?.mealLabel
@@ -96,7 +102,7 @@ function handleBook(option: RoomOffer) {
     <template #content>
       <div class="grid max-h-[75vh] gap-2 overflow-y-auto">
         <div
-          v-for="image in primaryOffer?.images ?? []"
+          v-for="image in offerImages"
           :key="image"
           class="relative h-126 overflow-hidden rounded-xl"
         >
@@ -116,11 +122,11 @@ function handleBook(option: RoomOffer) {
         <img
           :alt="primaryOffer?.roomTypeName"
           class="h-full w-full object-cover"
-          :src="primaryOffer?.images?.[0]"
+          :src="primaryImage"
         >
 
         <div
-          v-if="primaryOffer?.images?.length && primaryOffer.images.length > 1"
+          v-if="offerImages.length > 1"
           class="absolute inset-0 flex items-end justify-end p-4 transition group-hover:bg-black/5"
           @click="openModalPhoto"
         >
@@ -130,7 +136,7 @@ function handleBook(option: RoomOffer) {
             </div>
 
             <div class="text-xs">
-              {{ primaryOffer.images.length }} фото
+              {{ offerImages.length }} фото
             </div>
           </div>
         </div>

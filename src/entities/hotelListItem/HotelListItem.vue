@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import type { Hotel } from '~/src/entities/hotelListItem'
 import { hotelAmenities } from '~/src/shared/constants'
+import { useImageUrl } from '~/src/shared/utils/imageUrl'
 
 const props = defineProps<{ hotel: Hotel }>()
 const router = useRouter()
 const route = useRoute()
 const viewport = useViewport()
+
+// Преобразуем URL изображений для работы с API proxy
+const { getImageUrls } = useImageUrl()
+const thumbnailUrls = computed(() => getImageUrls(props.hotel.thumbnail))
 
 const apiParams = computed(() => {
   const cityId = route.query.cityId as string
@@ -221,10 +226,10 @@ function goToHotel() {
     <div class="flex items-stretch flex-col lg:flex-row h-full">
       <div class="rounded-2xl lg:w-80 w-full h-60 lg:h-auto overflow-hidden">
         <UCarousel
-          v-if="hotel.thumbnail && hotel.thumbnail.length > 0"
+          v-if="thumbnailUrls && thumbnailUrls.length > 0"
           v-slot="{ item }"
           class="h-full"
-          :items="hotel.thumbnail"
+          :items="thumbnailUrls"
           loop
           :ui="{
             viewport: 'h-full', // <-- тот самый overflow-hidden

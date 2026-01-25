@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { hotelAmenities } from '~/src/shared/constants'
 import type { RoomOffer } from '~/src/entities/offer/Offer.vue'
+import { useImageUrl } from '~/src/shared/utils/imageUrl'
 
 definePageMeta({
   layout: 'default',
@@ -137,14 +138,18 @@ function openBooking(option: RoomOffer) {
   })
 }
 
+// Преобразуем URL изображений для работы с API proxy
+const { getImageUrl } = useImageUrl()
+
 const allImages = computed(() => {
-  const res = hotel.value.offers.reduce((acc, current) => {
-    for (const img of current.images) {
-      acc.add(img)
+  const res = hotel.value.offers.reduce((acc: Set<string>, current: RoomOffer) => {
+    for (const img of current.images || []) {
+      // Преобразуем URL через наш прокси
+      acc.add(getImageUrl(img))
     }
 
     return acc
-  }, new Set())
+  }, new Set<string>())
 
   return [...res]
 })
