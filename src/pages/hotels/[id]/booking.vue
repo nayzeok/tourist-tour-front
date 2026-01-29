@@ -158,6 +158,9 @@ const specialRequestsExpanded = ref(false)
 const consentPersonalData = ref(false)
 const consentMarketing = ref(false)
 
+/** Показывать ошибки валидации под полями (после попытки отправки) */
+const validationShown = ref(false)
+
 // Состояние для модального окна изменения цены
 const priceChangedModal = ref(false)
 const priceChangeInfo = ref<{
@@ -180,6 +183,42 @@ const requiredFieldsMissing = computed(() => {
     !consentPersonalData.value
   )
 })
+
+/** Ошибки по полям для отображения под инпутами */
+const fieldErrors = computed(() => ({
+  guestLastName: !form.guestLastName.trim() ? 'Укажите фамилию гостя' : '',
+  guestFirstName: !form.guestFirstName.trim() ? 'Укажите имя гостя' : '',
+  payerLastName: !form.payerLastName.trim() ? 'Укажите фамилию покупателя' : '',
+  payerFirstName: !form.payerFirstName.trim() ? 'Укажите имя покупателя' : '',
+  payerEmail: !form.payerEmail.trim()
+    ? 'Укажите email'
+    : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.payerEmail.trim())
+      ? 'Некорректный email'
+      : '',
+  payerPhone: !form.payerPhone.trim()
+    ? 'Укажите телефон'
+    : form.payerPhone.replace(/\D/g, '').length < 10
+      ? 'Введите номер не короче 10 цифр'
+      : '',
+  consentPersonalData: !consentPersonalData.value ? 'Необходимо согласие на обработку персональных данных' : '',
+}))
+
+/** Список текстов ошибок для тоста */
+const validationErrorList = computed(() => {
+  const err = fieldErrors.value
+  const list: string[] = []
+  if (err.guestLastName) list.push('Фамилия гостя')
+  if (err.guestFirstName) list.push('Имя гостя')
+  if (err.payerLastName) list.push('Фамилия покупателя')
+  if (err.payerFirstName) list.push('Имя покупателя')
+  if (err.payerEmail) list.push('Email')
+  if (err.payerPhone) list.push('Телефон')
+  if (err.consentPersonalData) list.push('Согласие на обработку данных')
+  return list
+})
+
+/** Есть ли ошибки валидации (любое поле неверно) */
+const hasValidationErrors = computed(() => validationErrorList.value.length > 0)
 
 function formatDisplayDate(date: string) {
   const [year, month, day] = date.split('-')
@@ -415,13 +454,26 @@ async function submitBooking() {
     return
   }
 
-  if (requiredFieldsMissing.value) {
-    bookingError.value = 'Заполните все обязательные поля и дайте согласие на обработку персональных данных.'
+  if (hasValidationErrors.value) {
+    validationShown.value = true
+    bookingError.value = 'Заполните все обязательные поля.'
+    const list = validationErrorList.value
+    toast.add({
+      id: 'booking-validation',
+      title: 'Заполните обязательные поля',
+      description: list.length ? list.join(', ') : 'Проверьте данные формы',
+      color: 'error',
+    })
+    nextTick(() => {
+      const first = document.querySelector('[data-booking-field="error"]')
+      first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
     return
   }
 
   submitting.value = true
   bookingError.value = null
+  validationShown.value = false
 
   const payload = buildBookingPayload()
 
@@ -450,13 +502,55 @@ async function submitBooking() {
       return
     }
 
-    // Успешное бронирование
+    // Успешное бронирование — создаём счёт PayKeeper и редирект на оплату
     bookingResult.value = result
+    const booking = result?.created?.booking
+    const bookingNumber = booking?.number
+    const totalObj = booking?.total
+    const rawAmount =
+      (totalObj?.priceBeforeTax ?? 0) + (totalObj?.taxAmount ?? 0) ||
+      offer.value?.price?.total
+    const amount = Number(rawAmount)
+    const amountOk = Number.isFinite(amount) && amount > 0
+
+    if (bookingNumber && amountOk) {
+      try {
+        const invoiceRes = await $fetch<{ paymentLink?: string; invoiceId?: string; error?: string }>(
+          `${runtimeConfig.public.apiUrl}/paykeeper/invoice`,
+          {
+            method: 'POST',
+            body: {
+              orderId: String(bookingNumber),
+              amount: Math.round(amount * 100) / 100,
+              clientEmail: form.payerEmail.trim(),
+              clientPhone: form.payerPhone.trim(),
+              cart: [
+                {
+                  name: `Бронирование №${bookingNumber}`,
+                  price: amount,
+                  quantity: 1,
+                  sum: amount,
+                  tax: 'none',
+                  item_type: 'service',
+                },
+              ],
+            },
+          }
+        )
+        if (invoiceRes?.paymentLink) {
+          window.location.href = invoiceRes.paymentLink
+          return
+        }
+      } catch (_) {
+        // PayKeeper недоступен — показываем успех брони без редиректа
+      }
+    }
+
     toast.add({
       id: 'booking-success',
       title: 'Бронирование создано',
-      description: result?.created?.booking?.number
-        ? `Номер брони ${result.created.booking.number}`
+      description: bookingNumber
+        ? `Номер брони ${bookingNumber}`
         : 'Запрос успешно отправлен в отель',
       color: 'success',
     })
@@ -482,6 +576,7 @@ async function acceptAlternativeBooking() {
     return
   }
 
+  const alternativePrice = priceChangeInfo.value.alternativePrice
   submitting.value = true
   priceChangedModal.value = false
 
@@ -501,11 +596,53 @@ async function acceptAlternativeBooking() {
 
     bookingResult.value = result
     priceChangeInfo.value = null
+    const booking = result?.created?.booking
+    const bookingNumber = booking?.number
+    const totalObj = booking?.total
+    const amount =
+      (totalObj?.priceBeforeTax ?? 0) + (totalObj?.taxAmount ?? 0) ||
+      alternativePrice ||
+      offer.value?.price?.total
+
+    if (bookingNumber && amount != null && amount > 0) {
+      try {
+        const invoiceRes = await $fetch<{ paymentLink?: string; invoiceId?: string; error?: string }>(
+          `${runtimeConfig.public.apiUrl}/paykeeper/invoice`,
+          {
+            method: 'POST',
+            body: {
+              orderId: bookingNumber,
+              amount: Math.round(amount * 100) / 100,
+              clientEmail: form.payerEmail.trim(),
+              clientPhone: form.payerPhone.trim(),
+              cart: [
+                {
+                  name: `Бронирование №${bookingNumber}`,
+                  price: amount,
+                  quantity: 1,
+                  sum: amount,
+                  tax: 'none',
+                  item_type: 'service',
+                },
+              ],
+            },
+          }
+        )
+        if (invoiceRes?.paymentLink) {
+          window.location.href = invoiceRes.paymentLink
+          return
+        }
+      } catch (_) {
+        // PayKeeper недоступен
+      }
+    }
+
+    priceChangeInfo.value = null
     toast.add({
       id: 'booking-success',
       title: 'Бронирование создано',
-      description: result?.created?.booking?.number
-        ? `Номер брони ${result.created.booking.number}`
+      description: bookingNumber
+        ? `Номер брони ${bookingNumber}`
         : 'Запрос успешно отправлен в отель',
       color: 'success',
     })
@@ -690,13 +827,27 @@ if (hotelError.value) {
           <h2 class="font-semibold mb-1">Гость</h2>
           <p class="text-sm text-gray-600 mb-4">Взрослый, старше 18 лет</p>
           <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Фамилия</label>
-              <UInput v-model="form.guestLastName" placeholder="Иванов" />
+            <div :data-booking-field="validationShown && fieldErrors.guestLastName ? 'error' : undefined">
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Фамилия <span class="text-red-500">*</span></label>
+              <UInput
+                v-model="form.guestLastName"
+                placeholder="Иванов"
+                :ui="{ error: validationShown && fieldErrors.guestLastName ? 'border-red-500 focus:ring-red-500' : undefined }"
+              />
+              <p v-if="validationShown && fieldErrors.guestLastName" class="mt-1 text-sm text-red-600">
+                {{ fieldErrors.guestLastName }}
+              </p>
             </div>
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Имя</label>
-              <UInput v-model="form.guestFirstName" placeholder="Иван" />
+            <div :data-booking-field="validationShown && fieldErrors.guestFirstName ? 'error' : undefined">
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Имя <span class="text-red-500">*</span></label>
+              <UInput
+                v-model="form.guestFirstName"
+                placeholder="Иван"
+                :ui="{ error: validationShown && fieldErrors.guestFirstName ? 'border-red-500 focus:ring-red-500' : undefined }"
+              />
+              <p v-if="validationShown && fieldErrors.guestFirstName" class="mt-1 text-sm text-red-600">
+                {{ fieldErrors.guestFirstName }}
+              </p>
             </div>
           </div>
           <UButton class="mt-4" variant="outline" color="primary">
@@ -711,23 +862,53 @@ if (hotelError.value) {
             Отправим подтверждение брони, свяжемся в случае проблем
           </p>
           <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Фамилия</label>
-              <UInput v-model="form.payerLastName" placeholder="Иванов" />
+            <div :data-booking-field="validationShown && fieldErrors.payerLastName ? 'error' : undefined">
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Фамилия <span class="text-red-500">*</span></label>
+              <UInput
+                v-model="form.payerLastName"
+                placeholder="Иванов"
+                :ui="{ error: validationShown && fieldErrors.payerLastName ? 'border-red-500 focus:ring-red-500' : undefined }"
+              />
+              <p v-if="validationShown && fieldErrors.payerLastName" class="mt-1 text-sm text-red-600">
+                {{ fieldErrors.payerLastName }}
+              </p>
             </div>
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Имя</label>
-              <UInput v-model="form.payerFirstName" placeholder="Иван" />
+            <div :data-booking-field="validationShown && fieldErrors.payerFirstName ? 'error' : undefined">
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Имя <span class="text-red-500">*</span></label>
+              <UInput
+                v-model="form.payerFirstName"
+                placeholder="Иван"
+                :ui="{ error: validationShown && fieldErrors.payerFirstName ? 'border-red-500 focus:ring-red-500' : undefined }"
+              />
+              <p v-if="validationShown && fieldErrors.payerFirstName" class="mt-1 text-sm text-red-600">
+                {{ fieldErrors.payerFirstName }}
+              </p>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Электронная почта</label>
-              <UInput v-model="form.payerEmail" type="email" placeholder="user@example.com" />
+            <div :data-booking-field="validationShown && fieldErrors.payerEmail ? 'error' : undefined">
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Электронная почта <span class="text-red-500">*</span></label>
+              <UInput
+                v-model="form.payerEmail"
+                type="email"
+                placeholder="user@example.com"
+                :ui="{ error: validationShown && fieldErrors.payerEmail ? 'border-red-500 focus:ring-red-500' : undefined }"
+              />
+              <p v-if="validationShown && fieldErrors.payerEmail" class="mt-1 text-sm text-red-600">
+                {{ fieldErrors.payerEmail }}
+              </p>
             </div>
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Телефон</label>
-              <UInput v-model="form.payerPhone" type="tel" placeholder="+7 (999) 123-45-67" />
+            <div :data-booking-field="validationShown && fieldErrors.payerPhone ? 'error' : undefined">
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Телефон <span class="text-red-500">*</span></label>
+              <UInput
+                v-model="form.payerPhone"
+                type="tel"
+                placeholder="+7 (999) 123-45-67"
+                :ui="{ error: validationShown && fieldErrors.payerPhone ? 'border-red-500 focus:ring-red-500' : undefined }"
+              />
+              <p v-if="validationShown && fieldErrors.payerPhone" class="mt-1 text-sm text-red-600">
+                {{ fieldErrors.payerPhone }}
+              </p>
             </div>
           </div>
           <UCheckbox v-model="form.shareWithHotel" label="Передать в отель для связи" />
@@ -868,15 +1049,22 @@ if (hotelError.value) {
           </div>
 
           <!-- Чекбоксы согласия -->
-          <div class="space-y-3 mb-4">
+          <div
+            class="space-y-3 mb-4"
+            :data-booking-field="validationShown && fieldErrors.consentPersonalData ? 'error' : undefined"
+          >
             <UCheckbox v-model="consentPersonalData">
               <template #label>
                 <span class="text-sm">
                   Даю согласие на обработку
                   <NuxtLink to="/oferta" class="text-primary hover:underline">персональных данных</NuxtLink>
+                  <span class="text-red-500">*</span>
                 </span>
               </template>
             </UCheckbox>
+            <p v-if="validationShown && fieldErrors.consentPersonalData" class="text-sm text-red-600">
+              {{ fieldErrors.consentPersonalData }}
+            </p>
             <UCheckbox v-model="consentMarketing">
               <template #label>
                 <span class="text-sm">
@@ -890,7 +1078,6 @@ if (hotelError.value) {
           <UButton
             block
             size="lg"
-            :disabled="requiredFieldsMissing"
             :loading="submitting"
             @click="submitBooking"
           >
