@@ -158,6 +158,17 @@ const specialRequestsExpanded = ref(false)
 const consentPersonalData = ref(false)
 const consentMarketing = ref(false)
 
+// Состояние для модального окна изменения цены
+const priceChangedModal = ref(false)
+const priceChangeInfo = ref<{
+  originalPrice: number | null
+  alternativePrice: number | null
+  priceDifference: number | null
+  currencyCode: string
+  alternativeToken: string
+  warnings?: Array<{ code?: string | null; message?: string | null }>
+} | null>(null)
+
 const requiredFieldsMissing = computed(() => {
   return (
     !form.guestLastName.trim() ||
@@ -367,26 +378,12 @@ function goBack() {
   })
 }
 
-async function submitBooking() {
-  if (!offer.value || !propertyId.value || !stayDates.value) {
-    bookingError.value =
-      'Отсутствуют обязательные данные для бронирования. Обновите страницу и попробуйте снова.'
-    return
-  }
-
-  if (requiredFieldsMissing.value) {
-    bookingError.value = 'Заполните все обязательные поля и дайте согласие на обработку персональных данных.'
-    return
-  }
-
-  submitting.value = true
-  bookingError.value = null
-
-  const payload = {
+function buildBookingPayload(options?: { acceptAlternative?: boolean; alternativeToken?: string }) {
+  return {
     propertyId: propertyId.value,
     roomStay: offer.value,
-    arrival: stayDates.value.arrival,
-    departure: stayDates.value.departure,
+    arrival: stayDates.value!.arrival,
+    departure: stayDates.value!.departure,
     guestsCount: {
       adultCount: guestsCount.value.adultCount,
       ...(guestsCount.value.childAges?.length
@@ -406,10 +403,30 @@ async function submitBooking() {
         lastName: form.guestLastName.trim(),
       },
     ],
+    ...(options?.acceptAlternative ? { acceptAlternative: true } : {}),
+    ...(options?.alternativeToken ? { alternativeToken: options.alternativeToken } : {}),
+  }
+}
+
+async function submitBooking() {
+  if (!offer.value || !propertyId.value || !stayDates.value) {
+    bookingError.value =
+      'Отсутствуют обязательные данные для бронирования. Обновите страницу и попробуйте снова.'
+    return
   }
 
+  if (requiredFieldsMissing.value) {
+    bookingError.value = 'Заполните все обязательные поля и дайте согласие на обработку персональных данных.'
+    return
+  }
+
+  submitting.value = true
+  bookingError.value = null
+
+  const payload = buildBookingPayload()
+
   try {
-    const result = await $fetch(
+    const result = await $fetch<any>(
       `${runtimeConfig.public.apiUrl}/reservation/quick-book`,
       {
         method: 'POST',
@@ -417,6 +434,23 @@ async function submitBooking() {
       }
     )
 
+    // Проверяем, изменилась ли цена/доступность
+    if (result?.priceChanged && result?.alternativeToken) {
+      // Показываем модальное окно с предложением новых условий
+      priceChangeInfo.value = {
+        originalPrice: result.originalPrice,
+        alternativePrice: result.alternativePrice,
+        priceDifference: result.priceDifference,
+        currencyCode: result.currencyCode || 'RUB',
+        alternativeToken: result.alternativeToken,
+        warnings: result.warnings,
+      }
+      priceChangedModal.value = true
+      submitting.value = false
+      return
+    }
+
+    // Успешное бронирование
     bookingResult.value = result
     toast.add({
       id: 'booking-success',
@@ -438,6 +472,79 @@ async function submitBooking() {
   } finally {
     submitting.value = false
   }
+}
+
+/**
+ * Подтверждение бронирования на новых условиях (после изменения цены)
+ */
+async function acceptAlternativeBooking() {
+  if (!priceChangeInfo.value?.alternativeToken) {
+    return
+  }
+
+  submitting.value = true
+  priceChangedModal.value = false
+
+  const payload = buildBookingPayload({
+    acceptAlternative: true,
+    alternativeToken: priceChangeInfo.value.alternativeToken,
+  })
+
+  try {
+    const result = await $fetch<any>(
+      `${runtimeConfig.public.apiUrl}/reservation/quick-book`,
+      {
+        method: 'POST',
+        body: payload,
+      }
+    )
+
+    bookingResult.value = result
+    priceChangeInfo.value = null
+    toast.add({
+      id: 'booking-success',
+      title: 'Бронирование создано',
+      description: result?.created?.booking?.number
+        ? `Номер брони ${result.created.booking.number}`
+        : 'Запрос успешно отправлен в отель',
+      color: 'success',
+    })
+  } catch (error) {
+    const message = resolveErrorMessage(error)
+    bookingError.value = message
+    toast.add({
+      id: 'booking-error',
+      title: 'Не удалось забронировать',
+      description: message,
+      color: 'error',
+    })
+  } finally {
+    submitting.value = false
+  }
+}
+
+/**
+ * Отклонение новых условий — переход к повторному поиску
+ */
+function rejectAlternativeAndSearch() {
+  priceChangedModal.value = false
+  priceChangeInfo.value = null
+  
+  // Переходим на страницу поиска отелей с текущими параметрами
+  router.push({
+    path: '/hotels',
+    query: { ...route.query },
+  })
+}
+
+/**
+ * Форматирование цены для отображения
+ */
+function formatPriceDisplay(price: number | null, currency: string) {
+  if (price === null) return '—'
+  const formatted = price.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
+  const symbol = currency === 'RUB' ? '₽' : currency
+  return `${formatted} ${symbol}`
 }
 
 // Проверяем наличие обязательных данных
@@ -801,5 +908,87 @@ if (hotelError.value) {
         </div>
       </div>
     </div>
+
+    <!-- Модальное окно: цена/доступность изменились -->
+    <UModal v-model:open="priceChangedModal">
+      <template #content>
+        <div class="p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
+              <UIcon name="i-lucide-alert-triangle" class="w-6 h-6 text-orange-600" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Условия изменились</h3>
+              <p class="text-sm text-gray-500">Цена или доступность номера изменились</p>
+            </div>
+          </div>
+
+          <div v-if="priceChangeInfo" class="space-y-4">
+            <!-- Информация об изменении цены -->
+            <div class="bg-gray-50 rounded-xl p-4 space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">Первоначальная цена:</span>
+                <span class="font-medium line-through text-gray-400">
+                  {{ formatPriceDisplay(priceChangeInfo.originalPrice, priceChangeInfo.currencyCode) }}
+                </span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">Новая цена:</span>
+                <span class="font-semibold text-lg" :class="priceChangeInfo.priceDifference && priceChangeInfo.priceDifference > 0 ? 'text-red-600' : 'text-green-600'">
+                  {{ formatPriceDisplay(priceChangeInfo.alternativePrice, priceChangeInfo.currencyCode) }}
+                </span>
+              </div>
+              <div v-if="priceChangeInfo.priceDifference" class="flex justify-between items-center pt-2 border-t border-gray-200">
+                <span class="text-gray-600">Разница:</span>
+                <span class="font-medium" :class="priceChangeInfo.priceDifference > 0 ? 'text-red-600' : 'text-green-600'">
+                  {{ priceChangeInfo.priceDifference > 0 ? '+' : '' }}{{ formatPriceDisplay(priceChangeInfo.priceDifference, priceChangeInfo.currencyCode) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Предупреждения от API -->
+            <div v-if="priceChangeInfo.warnings?.length" class="bg-yellow-50 rounded-xl p-4">
+              <div class="flex items-start gap-2">
+                <UIcon name="i-lucide-info" class="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <div class="text-sm text-yellow-800">
+                  <p v-for="(warning, idx) in priceChangeInfo.warnings" :key="idx">
+                    {{ warning.message }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Описание ситуации -->
+            <p class="text-sm text-gray-600">
+              Между моментом поиска и оформлением бронирования условия изменились. 
+              Вы можете продолжить бронирование по новой цене или выполнить повторный поиск.
+            </p>
+          </div>
+
+          <!-- Кнопки действий -->
+          <div class="flex flex-col sm:flex-row gap-3 mt-6">
+            <UButton
+              block
+              variant="outline"
+              color="neutral"
+              size="lg"
+              @click="rejectAlternativeAndSearch"
+            >
+              <UIcon name="i-lucide-search" class="w-4 h-4 mr-2" />
+              Повторить поиск
+            </UButton>
+            <UButton
+              block
+              size="lg"
+              :loading="submitting"
+              @click="acceptAlternativeBooking"
+            >
+              <UIcon name="i-lucide-check" class="w-4 h-4 mr-2" />
+              Принять новые условия
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
