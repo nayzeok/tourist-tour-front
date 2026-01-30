@@ -81,9 +81,9 @@ const openOferta = () => {
           </div>
 
           <div class="flex flex-col gap-1">
-            <div class="text-sm">
+            <NuxtLink class="cursor-pointer text-sm" to="/rent">
               Прокат автомобилей
-            </div>
+            </NuxtLink>
 
             <div class="text-gray-500 text-xs">
               Доступно в РФ

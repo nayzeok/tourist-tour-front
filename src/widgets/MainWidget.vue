@@ -31,6 +31,7 @@ const tabs: TabItem[] = [
     name: 'Аренда авто',
     value: 'rent',
     icon: 'c:car',
+    to: '/rent',
   },
 ]
 
