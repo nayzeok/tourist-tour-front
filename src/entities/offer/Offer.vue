@@ -18,6 +18,8 @@ export type CancellationPolicy = {
 export type RoomOffer = {
   roomTypeId: string
   roomTypeName: string
+  /** Основные и дополнительные места (может отличаться по тарифу) */
+  fullPlacementsName?: string | null
   mealLabel?: string
   price: { total: number; perNight: number; currency: string }
   images: string[]
@@ -256,6 +258,14 @@ function handleBook(option: RoomOffer) {
               <UIcon class="h-5 w-5 text-gray-600" :name="paymentBadge.icon" />
               <span class="truncate text-sm font-medium">{{ paymentBadge.text }}</span>
             </div>
+
+            <template v-if="option.fullPlacementsName">
+              <USeparator />
+              <div class="flex items-center gap-1.5 text-gray-700">
+                <UIcon class="h-5 w-5 text-gray-600 shrink-0" name="i-lucide-bed-double" />
+                <span class="truncate text-sm font-medium">{{ option.fullPlacementsName }}</span>
+              </div>
+            </template>
           </div>
         </div>
 

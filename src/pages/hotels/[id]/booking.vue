@@ -161,7 +161,7 @@ const consentMarketing = ref(false)
 /** Показывать ошибки валидации под полями (после попытки отправки) */
 const validationShown = ref(false)
 
-// Состояние для модального окна изменения цены
+// Состояние для модального окна изменения цены/доступности
 const priceChangedModal = ref(false)
 const priceChangeInfo = ref<{
   originalPrice: number | null
@@ -171,6 +171,10 @@ const priceChangeInfo = ref<{
   alternativeToken: string
   warnings?: Array<{ code?: string | null; message?: string | null }>
 } | null>(null)
+
+// Нет доступности: номера закончились, альтернативы нет
+const noAvailabilityModal = ref(false)
+const noAvailabilityMessage = ref('')
 
 const requiredFieldsMissing = computed(() => {
   return (
@@ -478,21 +482,29 @@ async function submitBooking() {
   const payload = buildBookingPayload()
 
   try {
+    // Подготовка к оплате: только верификация. Бронь создаётся после подтверждения оплаты (webhook).
     const result = await $fetch<any>(
-      `${runtimeConfig.public.apiUrl}/reservation/quick-book`,
+      `${runtimeConfig.public.apiUrl}/reservation/prepare-payment`,
       {
         method: 'POST',
         body: payload,
       }
     )
 
-    // Проверяем, изменилась ли цена/доступность
+    // Нет доступности: ни booking, ни alternativeBooking
+    if (result?.noAvailability) {
+      noAvailabilityMessage.value = result.message || 'Номера по выбранным условиям закончились. Вернитесь к поиску.'
+      noAvailabilityModal.value = true
+      submitting.value = false
+      return
+    }
+
+    // Изменилась цена или доступность — есть вариант в alternativeBooking
     if (result?.priceChanged && result?.alternativeToken) {
-      // Показываем модальное окно с предложением новых условий
       priceChangeInfo.value = {
-        originalPrice: result.originalPrice,
-        alternativePrice: result.alternativePrice,
-        priceDifference: result.priceDifference,
+        originalPrice: result.originalPrice ?? null,
+        alternativePrice: result.alternativePrice ?? null,
+        priceDifference: result.priceDifference ?? null,
         currencyCode: result.currencyCode || 'RUB',
         alternativeToken: result.alternativeToken,
         warnings: result.warnings,
@@ -502,31 +514,24 @@ async function submitBooking() {
       return
     }
 
-    // Успешное бронирование — создаём счёт PayKeeper и редирект на оплату
-    bookingResult.value = result
-    const booking = result?.created?.booking
-    const bookingNumber = booking?.number
-    const totalObj = booking?.total
-    const rawAmount =
-      (totalObj?.priceBeforeTax ?? 0) + (totalObj?.taxAmount ?? 0) ||
-      offer.value?.price?.total
-    const amount = Number(rawAmount)
-    const amountOk = Number.isFinite(amount) && amount > 0
+    const paymentId = result?.paymentId
+    const amount = result?.amount
+    const amountOk = paymentId && Number.isFinite(amount) && amount > 0
 
-    if (bookingNumber && amountOk) {
+    if (paymentId && amountOk) {
       try {
         const invoiceRes = await $fetch<{ paymentLink?: string; invoiceId?: string; error?: string }>(
           `${runtimeConfig.public.apiUrl}/paykeeper/invoice`,
           {
             method: 'POST',
             body: {
-              orderId: String(bookingNumber),
+              orderId: paymentId,
               amount: Math.round(amount * 100) / 100,
               clientEmail: form.payerEmail.trim(),
               clientPhone: form.payerPhone.trim(),
               cart: [
                 {
-                  name: `Бронирование №${bookingNumber}`,
+                  name: 'Бронирование (оплата)',
                   price: amount,
                   quantity: 1,
                   sum: amount,
@@ -538,22 +543,23 @@ async function submitBooking() {
           }
         )
         if (invoiceRes?.paymentLink) {
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('lastBookingPaymentId', paymentId)
+          }
           window.location.href = invoiceRes.paymentLink
           return
         }
       } catch (_) {
-        // PayKeeper недоступен — показываем успех брони без редиректа
+        toast.add({
+          id: 'booking-error',
+          title: 'Ошибка создания счёта',
+          description: 'Платёжная система недоступна. Попробуйте позже.',
+          color: 'error',
+        })
       }
+    } else {
+      bookingError.value = 'Не удалось подготовить платёж. Попробуйте ещё раз.'
     }
-
-    toast.add({
-      id: 'booking-success',
-      title: 'Бронирование создано',
-      description: bookingNumber
-        ? `Номер брони ${bookingNumber}`
-        : 'Запрос успешно отправлен в отель',
-      color: 'success',
-    })
   } catch (error) {
     const message = resolveErrorMessage(error)
     bookingError.value = message
@@ -569,55 +575,58 @@ async function submitBooking() {
 }
 
 /**
- * Подтверждение бронирования на новых условиях (после изменения цены)
+ * Подтверждение бронирования на новых условиях (после изменения цены) — подготовка к оплате и редирект
  */
 async function acceptAlternativeBooking() {
   if (!priceChangeInfo.value?.alternativeToken) {
     return
   }
 
-  const alternativePrice = priceChangeInfo.value.alternativePrice
+  const alternativePrice = priceChangeInfo.value.alternativePrice ?? 0
   submitting.value = true
   priceChangedModal.value = false
 
-  const payload = buildBookingPayload({
-    acceptAlternative: true,
-    alternativeToken: priceChangeInfo.value.alternativeToken,
-  })
+  const payload = {
+    ...buildBookingPayload({
+      acceptAlternative: true,
+      alternativeToken: priceChangeInfo.value.alternativeToken,
+    }),
+    amountForAlternative: alternativePrice,
+  }
 
   try {
     const result = await $fetch<any>(
-      `${runtimeConfig.public.apiUrl}/reservation/quick-book`,
+      `${runtimeConfig.public.apiUrl}/reservation/prepare-payment`,
       {
         method: 'POST',
         body: payload,
       }
     )
 
-    bookingResult.value = result
-    priceChangeInfo.value = null
-    const booking = result?.created?.booking
-    const bookingNumber = booking?.number
-    const totalObj = booking?.total
-    const amount =
-      (totalObj?.priceBeforeTax ?? 0) + (totalObj?.taxAmount ?? 0) ||
-      alternativePrice ||
-      offer.value?.price?.total
+    if (result?.priceChanged) {
+      priceChangeInfo.value = null
+      bookingError.value = 'Условия снова изменились. Начните оформление заново.'
+      submitting.value = false
+      return
+    }
 
-    if (bookingNumber && amount != null && amount > 0) {
+    const paymentId = result?.paymentId
+    const amount = result?.amount ?? alternativePrice
+
+    if (paymentId && amount > 0) {
       try {
         const invoiceRes = await $fetch<{ paymentLink?: string; invoiceId?: string; error?: string }>(
           `${runtimeConfig.public.apiUrl}/paykeeper/invoice`,
           {
             method: 'POST',
             body: {
-              orderId: bookingNumber,
+              orderId: paymentId,
               amount: Math.round(amount * 100) / 100,
               clientEmail: form.payerEmail.trim(),
               clientPhone: form.payerPhone.trim(),
               cart: [
                 {
-                  name: `Бронирование №${bookingNumber}`,
+                  name: 'Бронирование (оплата по новым условиям)',
                   price: amount,
                   quantity: 1,
                   sum: amount,
@@ -629,6 +638,10 @@ async function acceptAlternativeBooking() {
           }
         )
         if (invoiceRes?.paymentLink) {
+          priceChangeInfo.value = null
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('lastBookingPaymentId', paymentId)
+          }
           window.location.href = invoiceRes.paymentLink
           return
         }
@@ -638,14 +651,7 @@ async function acceptAlternativeBooking() {
     }
 
     priceChangeInfo.value = null
-    toast.add({
-      id: 'booking-success',
-      title: 'Бронирование создано',
-      description: bookingNumber
-        ? `Номер брони ${bookingNumber}`
-        : 'Запрос успешно отправлен в отель',
-      color: 'success',
-    })
+    bookingError.value = 'Не удалось создать счёт. Попробуйте позже.'
   } catch (error) {
     const message = resolveErrorMessage(error)
     bookingError.value = message
@@ -661,13 +667,14 @@ async function acceptAlternativeBooking() {
 }
 
 /**
- * Отклонение новых условий — переход к повторному поиску
+ * Отклонение новых условий / возврат к поиску (при изменении условий или отсутствии номеров)
  */
 function rejectAlternativeAndSearch() {
   priceChangedModal.value = false
   priceChangeInfo.value = null
-  
-  // Переходим на страницу поиска отелей с текущими параметрами
+  noAvailabilityModal.value = false
+  noAvailabilityMessage.value = ''
+
   router.push({
     path: '/hotels',
     query: { ...route.query },
@@ -1096,7 +1103,35 @@ if (hotelError.value) {
       </div>
     </div>
 
-    <!-- Модальное окно: цена/доступность изменились -->
+    <!-- Модальное окно: номера закончились, альтернативы нет -->
+    <UModal v-model:open="noAvailabilityModal">
+      <template #content>
+        <div class="p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+              <UIcon name="i-lucide-info" class="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Нет доступных номеров</h3>
+              <p class="text-sm text-gray-500">Условия изменились или выбранный вариант больше недоступен</p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 mb-6">
+            {{ noAvailabilityMessage }}
+          </p>
+          <UButton
+            block
+            size="lg"
+            @click="rejectAlternativeAndSearch"
+          >
+            <UIcon name="i-lucide-search" class="w-4 h-4 mr-2" />
+            Вернуться к поиску
+          </UButton>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- Модальное окно: цена/доступность изменились — есть вариант в alternativeBooking -->
     <UModal v-model:open="priceChangedModal">
       <template #content>
         <div class="p-6">
@@ -1111,7 +1146,7 @@ if (hotelError.value) {
           </div>
 
           <div v-if="priceChangeInfo" class="space-y-4">
-            <!-- Информация об изменении цены -->
+            <!-- Информация об изменении цены/доступности -->
             <div class="bg-gray-50 rounded-xl p-4 space-y-3">
               <div class="flex justify-between items-center">
                 <span class="text-gray-600">Первоначальная цена:</span>
@@ -1120,12 +1155,17 @@ if (hotelError.value) {
                 </span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-gray-600">Новая цена:</span>
-                <span class="font-semibold text-lg" :class="priceChangeInfo.priceDifference && priceChangeInfo.priceDifference > 0 ? 'text-red-600' : 'text-green-600'">
+                <span class="text-gray-600">Актуальная цена:</span>
+                <span
+                  v-if="priceChangeInfo.alternativePrice != null"
+                  class="font-semibold text-lg"
+                  :class="priceChangeInfo.priceDifference && priceChangeInfo.priceDifference > 0 ? 'text-red-600' : 'text-green-600'"
+                >
                   {{ formatPriceDisplay(priceChangeInfo.alternativePrice, priceChangeInfo.currencyCode) }}
                 </span>
+                <span v-else class="text-gray-600 text-sm">при оформлении</span>
               </div>
-              <div v-if="priceChangeInfo.priceDifference" class="flex justify-between items-center pt-2 border-t border-gray-200">
+              <div v-if="priceChangeInfo.priceDifference != null" class="flex justify-between items-center pt-2 border-t border-gray-200">
                 <span class="text-gray-600">Разница:</span>
                 <span class="font-medium" :class="priceChangeInfo.priceDifference > 0 ? 'text-red-600' : 'text-green-600'">
                   {{ priceChangeInfo.priceDifference > 0 ? '+' : '' }}{{ formatPriceDisplay(priceChangeInfo.priceDifference, priceChangeInfo.currencyCode) }}
