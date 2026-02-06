@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { cancelBooking as apiCancelBooking } from '~/src/shared/api/reservation'
 import { fetchUserBookings } from '~/src/shared/api/user'
 import { useAuthStore } from '~/src/shared/store'
 import { formatISOToDate, formatRubles } from '~/src/shared/utils'
@@ -11,6 +12,7 @@ definePageMeta({
 })
 
 const auth = useAuthStore()
+const toast = useToast()
 await auth.ensureStatus()
 
 const bookings = ref<UserBooking[]>([])
@@ -20,6 +22,18 @@ const pageSize = 10
 const pending = ref(false)
 const errorMessage = ref<string | null>(null)
 
+const bookingToCancel = ref<UserBooking | null>(null)
+const cancelling = ref(false)
+
+const cancelModalOpen = computed({
+  get: () => !!bookingToCancel.value,
+  set: (v) => {
+    if (!v && !cancelling.value) {
+      bookingToCancel.value = null
+    }
+  },
+})
+
 const totalPages = computed(() => {
   if (total.value === 0) {
     return 1
@@ -28,6 +42,11 @@ const totalPages = computed(() => {
 })
 
 const hasBookings = computed(() => bookings.value.length > 0)
+
+const canCancelBooking = (booking: UserBooking) => {
+  const s = (booking.status || '').toLowerCase()
+  return s !== 'cancelled' && s !== 'canceled' && s !== 'отменено'
+}
 
 const extractErrorMessage = (error: unknown) => {
   if (error && typeof error === 'object' && 'data' in error) {
@@ -70,6 +89,46 @@ const goToPage = async (nextPage: number) => {
 
   page.value = nextPage
   await loadBookings()
+}
+
+const openCancelModal = (booking: UserBooking) => {
+  bookingToCancel.value = booking
+}
+
+const closeCancelModal = () => {
+  if (!cancelling.value) {
+    bookingToCancel.value = null
+  }
+}
+
+const confirmCancel = async () => {
+  const booking = bookingToCancel.value
+  if (!booking?.number) {
+    return
+  }
+
+  cancelling.value = true
+  try {
+    await apiCancelBooking(booking.number)
+    toast.add({
+      id: 'booking-cancelled',
+      title: 'Бронирование отменено',
+      description: `Бронирование № ${booking.number} отменено.`,
+      color: 'success',
+    })
+    bookingToCancel.value = null
+    await loadBookings()
+  } catch (error) {
+    const message = extractErrorMessage(error)
+    toast.add({
+      id: 'booking-cancel-error',
+      title: 'Не удалось отменить бронирование',
+      description: message,
+      color: 'error',
+    })
+  } finally {
+    cancelling.value = false
+  }
 }
 </script>
 
@@ -149,6 +208,18 @@ const goToPage = async (nextPage: number) => {
               Создано: {{ formatISOToDate(booking.createdAt) || '—' }}
             </div>
           </dl>
+
+          <div v-if="canCancelBooking(booking)" class="mt-4 flex justify-end">
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              :disabled="cancelling"
+              @click="openCancelModal(booking)"
+            >
+              Отменить бронирование
+            </UButton>
+          </div>
         </article>
       </div>
 
@@ -179,5 +250,35 @@ const goToPage = async (nextPage: number) => {
         </button>
       </div>
     </div>
+
+    <UModal v-model:open="cancelModalOpen">
+      <template #content>
+        <div class="p-6">
+          <h3 class="text-lg font-semibold">
+            Отменить бронирование?
+          </h3>
+          <p class="mt-2 text-sm text-gray-600">
+            Бронирование № {{ bookingToCancel?.number }} будет отменено. Это действие нельзя отменить.
+          </p>
+          <div class="mt-6 flex justify-end gap-3">
+            <UButton
+              color="neutral"
+              variant="soft"
+              :disabled="cancelling"
+              @click="closeCancelModal()"
+            >
+              Нет
+            </UButton>
+            <UButton
+              color="error"
+              :loading="cancelling"
+              @click="confirmCancel"
+            >
+              Отменить бронирование
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
