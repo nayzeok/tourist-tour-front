@@ -482,16 +482,16 @@ async function submitBooking() {
   const payload = buildBookingPayload()
 
   try {
-    // Подготовка к оплате: только верификация. Бронь создаётся после подтверждения оплаты (webhook).
+    // Прямое создание брони (без эквайринга)
     const result = await $fetch<any>(
-      `${runtimeConfig.public.apiUrl}/reservation/prepare-payment`,
+      `${runtimeConfig.public.apiUrl}/reservation/quick-book`,
       {
         method: 'POST',
         body: payload,
       }
     )
 
-    // Нет доступности: ни booking, ни alternativeBooking
+    // Нет доступности
     if (result?.noAvailability) {
       noAvailabilityMessage.value = result.message || 'Номера по выбранным условиям закончились. Вернитесь к поиску.'
       noAvailabilityModal.value = true
@@ -499,7 +499,7 @@ async function submitBooking() {
       return
     }
 
-    // Изменилась цена или доступность — есть вариант в alternativeBooking
+    // Изменилась цена
     if (result?.priceChanged && result?.alternativeToken) {
       priceChangeInfo.value = {
         originalPrice: result.originalPrice ?? null,
@@ -514,52 +514,18 @@ async function submitBooking() {
       return
     }
 
-    const paymentId = result?.paymentId
-    const amount = result?.amount
-    const amountOk = paymentId && Number.isFinite(amount) && amount > 0
-
-    if (paymentId && amountOk) {
-      try {
-        const invoiceRes = await $fetch<{ paymentLink?: string; invoiceId?: string; error?: string }>(
-          `${runtimeConfig.public.apiUrl}/paykeeper/invoice`,
-          {
-            method: 'POST',
-            body: {
-              orderId: paymentId,
-              amount: Math.round(amount * 100) / 100,
-              clientEmail: form.payerEmail.trim(),
-              clientPhone: form.payerPhone.trim(),
-              cart: [
-                {
-                  name: 'Бронирование (оплата)',
-                  price: amount,
-                  quantity: 1,
-                  sum: amount,
-                  tax: 'none',
-                  item_type: 'service',
-                },
-              ],
-            },
-          }
-        )
-        if (invoiceRes?.paymentLink) {
-          if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.setItem('lastBookingPaymentId', paymentId)
-          }
-          window.location.href = invoiceRes.paymentLink
-          return
-        }
-      } catch (_) {
-        toast.add({
-          id: 'booking-error',
-          title: 'Ошибка создания счёта',
-          description: 'Платёжная система недоступна. Попробуйте позже.',
-          color: 'error',
-        })
-      }
-    } else {
-      bookingError.value = 'Не удалось подготовить платёж. Попробуйте ещё раз.'
+    // Бронь создана — переходим на страницу успеха
+    // quick-book возвращает { created: { booking: { number } }, ... }
+    const bookingNumber = result?.created?.booking?.number
+    if (bookingNumber) {
+      navigateTo({
+        path: '/hotels/booking/success',
+        query: { bookingNumber },
+      })
+      return
     }
+
+    bookingError.value = 'Не удалось создать бронирование. Попробуйте ещё раз.'
   } catch (error) {
     const message = resolveErrorMessage(error)
     bookingError.value = message
@@ -582,27 +548,25 @@ async function acceptAlternativeBooking() {
     return
   }
 
-  const alternativePrice = priceChangeInfo.value.alternativePrice ?? 0
   submitting.value = true
   priceChangedModal.value = false
 
-  const payload = {
-    ...buildBookingPayload({
-      acceptAlternative: true,
-      alternativeToken: priceChangeInfo.value.alternativeToken,
-    }),
-    amountForAlternative: alternativePrice,
-  }
+  const payload = buildBookingPayload({
+    acceptAlternative: true,
+    alternativeToken: priceChangeInfo.value.alternativeToken,
+  })
 
   try {
+    // Прямое создание брони по альтернативным условиям (без эквайринга)
     const result = await $fetch<any>(
-      `${runtimeConfig.public.apiUrl}/reservation/prepare-payment`,
+      `${runtimeConfig.public.apiUrl}/reservation/quick-book`,
       {
         method: 'POST',
         body: payload,
       }
     )
 
+    // Условия снова изменились
     if (result?.priceChanged) {
       priceChangeInfo.value = null
       bookingError.value = 'Условия снова изменились. Начните оформление заново.'
@@ -610,48 +574,28 @@ async function acceptAlternativeBooking() {
       return
     }
 
-    const paymentId = result?.paymentId
-    const amount = result?.amount ?? alternativePrice
+    // Нет доступности
+    if (result?.noAvailability) {
+      priceChangeInfo.value = null
+      noAvailabilityMessage.value = result.message || 'Номера по выбранным условиям закончились. Вернитесь к поиску.'
+      noAvailabilityModal.value = true
+      submitting.value = false
+      return
+    }
 
-    if (paymentId && amount > 0) {
-      try {
-        const invoiceRes = await $fetch<{ paymentLink?: string; invoiceId?: string; error?: string }>(
-          `${runtimeConfig.public.apiUrl}/paykeeper/invoice`,
-          {
-            method: 'POST',
-            body: {
-              orderId: paymentId,
-              amount: Math.round(amount * 100) / 100,
-              clientEmail: form.payerEmail.trim(),
-              clientPhone: form.payerPhone.trim(),
-              cart: [
-                {
-                  name: 'Бронирование (оплата по новым условиям)',
-                  price: amount,
-                  quantity: 1,
-                  sum: amount,
-                  tax: 'none',
-                  item_type: 'service',
-                },
-              ],
-            },
-          }
-        )
-        if (invoiceRes?.paymentLink) {
-          priceChangeInfo.value = null
-          if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.setItem('lastBookingPaymentId', paymentId)
-          }
-          window.location.href = invoiceRes.paymentLink
-          return
-        }
-      } catch (_) {
-        // PayKeeper недоступен
-      }
+    // Бронь создана — переходим на страницу успеха
+    const bookingNumber = result?.created?.booking?.number
+    if (bookingNumber) {
+      priceChangeInfo.value = null
+      navigateTo({
+        path: '/hotels/booking/success',
+        query: { bookingNumber },
+      })
+      return
     }
 
     priceChangeInfo.value = null
-    bookingError.value = 'Не удалось создать счёт. Попробуйте позже.'
+    bookingError.value = 'Не удалось создать бронирование. Попробуйте ещё раз.'
   } catch (error) {
     const message = resolveErrorMessage(error)
     bookingError.value = message

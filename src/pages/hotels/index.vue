@@ -55,8 +55,9 @@ const {
     )
   },
   {
-    // Предотвращаем дублирование запросов при одновременных вызовах
     dedupe: 'defer',
+    // SSR-данные передаются клиенту через payload — повторный запрос не нужен
+    getCachedData: (key, nuxtApp) => nuxtApp.payload.data[key] ?? nuxtApp.static.data[key],
   }
 )
 
