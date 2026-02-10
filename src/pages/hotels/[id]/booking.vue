@@ -446,6 +446,8 @@ function buildBookingPayload(options?: { acceptAlternative?: boolean; alternativ
         lastName: form.guestLastName.trim(),
       },
     ],
+    ...(hotel.value?.checkInTime ? { checkInTime: hotel.value.checkInTime } : {}),
+    ...(hotel.value?.checkOutTime ? { checkOutTime: hotel.value.checkOutTime } : {}),
     ...(options?.acceptAlternative ? { acceptAlternative: true } : {}),
     ...(options?.alternativeToken ? { alternativeToken: options.alternativeToken } : {}),
   }

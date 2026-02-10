@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { cancelBooking as apiCancelBooking } from '~/src/shared/api/reservation'
+import { cancelBooking as apiCancelBooking, calculateCancellationPenalty } from '~/src/shared/api/reservation'
 import { fetchUserBookings } from '~/src/shared/api/user'
 import { useAuthStore } from '~/src/shared/store'
 import { formatISOToDate, formatRubles } from '~/src/shared/utils'
@@ -24,6 +24,8 @@ const errorMessage = ref<string | null>(null)
 
 const bookingToCancel = ref<UserBooking | null>(null)
 const cancelling = ref(false)
+const penaltyAmount = ref<number | null>(null)
+const penaltyLoading = ref(false)
 
 const cancelModalOpen = computed({
   get: () => !!bookingToCancel.value,
@@ -91,13 +93,24 @@ const goToPage = async (nextPage: number) => {
   await loadBookings()
 }
 
-const openCancelModal = (booking: UserBooking) => {
+const openCancelModal = async (booking: UserBooking) => {
   bookingToCancel.value = booking
+  penaltyAmount.value = null
+  penaltyLoading.value = true
+  try {
+    const result = await calculateCancellationPenalty(booking.number)
+    penaltyAmount.value = result?.penaltyAmount ?? 0
+  } catch {
+    penaltyAmount.value = null
+  } finally {
+    penaltyLoading.value = false
+  }
 }
 
 const closeCancelModal = () => {
   if (!cancelling.value) {
     bookingToCancel.value = null
+    penaltyAmount.value = null
   }
 }
 
@@ -109,7 +122,9 @@ const confirmCancel = async () => {
 
   cancelling.value = true
   try {
-    await apiCancelBooking(booking.number)
+    await apiCancelBooking(booking.number, {
+      expectedPenaltyAmount: penaltyAmount.value ?? undefined,
+    })
     toast.add({
       id: 'booking-cancelled',
       title: 'Бронирование отменено',
@@ -117,6 +132,7 @@ const confirmCancel = async () => {
       color: 'success',
     })
     bookingToCancel.value = null
+    penaltyAmount.value = null
     await loadBookings()
   } catch (error) {
     const message = extractErrorMessage(error)
@@ -260,6 +276,20 @@ const confirmCancel = async () => {
           <p class="mt-2 text-sm text-gray-600">
             Бронирование № {{ bookingToCancel?.number }} будет отменено. Это действие нельзя отменить.
           </p>
+
+          <div v-if="penaltyLoading" class="mt-3 text-sm text-gray-500">
+            Расчёт штрафа…
+          </div>
+          <div v-else-if="penaltyAmount != null && penaltyAmount > 0" class="mt-3 rounded-lg bg-red-50 p-3">
+            <p class="text-sm font-medium text-red-700">
+              Штраф за отмену: {{ formatRubles(penaltyAmount) }}
+            </p>
+          </div>
+          <div v-else-if="penaltyAmount === 0" class="mt-3 rounded-lg bg-green-50 p-3">
+            <p class="text-sm font-medium text-green-700">
+              Бесплатная отмена — штраф не взимается
+            </p>
+          </div>
           <div class="mt-6 flex justify-end gap-3">
             <UButton
               color="neutral"
