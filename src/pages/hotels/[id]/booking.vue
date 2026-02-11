@@ -38,6 +38,13 @@ const childAges = computed(() => {
     .filter((age) => Number.isFinite(age) && age >= 0)
 })
 
+// DEV helper: позволяет подменять checksum через query (?forceChecksum=...)
+const forcedChecksum = computed(() => {
+  if (!import.meta.dev) return null
+  const raw = route.query.forceChecksum
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : null
+})
+
 const guestsCount = computed(() => ({
   adultCount: adultCount.value,
   ...(childAges.value.length ? { childAges: childAges.value } : {}),
@@ -422,9 +429,16 @@ function goBack() {
 }
 
 function buildBookingPayload(options?: { acceptAlternative?: boolean; alternativeToken?: string }) {
+  const roomStayPayload = offer.value
+    ? {
+        ...offer.value,
+        ...(forcedChecksum.value ? { checksum: forcedChecksum.value } : {}),
+      }
+    : offer.value
+
   return {
     propertyId: propertyId.value,
-    roomStay: offer.value,
+    roomStay: roomStayPayload,
     arrival: stayDates.value!.arrival,
     departure: stayDates.value!.departure,
     guestsCount: {
@@ -454,6 +468,19 @@ function buildBookingPayload(options?: { acceptAlternative?: boolean; alternativ
 }
 
 async function submitBooking() {
+  if (submitting.value) return
+  // После изменения цены повторный "Оплатить" запрещён:
+  // пользователь должен выбрать действие в модалке (принять новые условия или поиск заново).
+  if (priceChangedModal.value || priceChangeInfo.value?.alternativeToken) {
+    priceChangedModal.value = true
+    toast.add({
+      id: 'booking-price-changed-confirm-required',
+      title: 'Требуется подтверждение',
+      description: 'Выберите действие в окне изменения условий.',
+      color: 'warning',
+    })
+    return
+  }
   if (!offer.value || !propertyId.value || !stayDates.value) {
     bookingError.value =
       'Отсутствуют обязательные данные для бронирования. Обновите страницу и попробуйте снова.'
@@ -543,15 +570,14 @@ async function submitBooking() {
 }
 
 /**
- * Подтверждение бронирования на новых условиях (после изменения цены) — подготовка к оплате и редирект
+ * Подтверждение бронирования на новых условиях (после изменения цены).
+ * Отправляется один запрос quick-book с acceptAlternative + alternativeToken (только create, без повторного verify).
  */
 async function acceptAlternativeBooking() {
-  if (!priceChangeInfo.value?.alternativeToken) {
-    return
-  }
+  if (!priceChangeInfo.value?.alternativeToken) return
+  if (submitting.value) return
 
   submitting.value = true
-  priceChangedModal.value = false
 
   const payload = buildBookingPayload({
     acceptAlternative: true,
@@ -569,15 +595,30 @@ async function acceptAlternativeBooking() {
     )
 
     // Условия снова изменились
-    if (result?.priceChanged) {
-      priceChangeInfo.value = null
-      bookingError.value = 'Условия снова изменились. Начните оформление заново.'
+    if (result?.priceChanged && result?.alternativeToken) {
+      // Обновляем информацию о новых условиях
+      priceChangeInfo.value = {
+        originalPrice: result.originalPrice ?? priceChangeInfo.value.originalPrice,
+        alternativePrice: result.alternativePrice ?? null,
+        priceDifference: result.priceDifference ?? null,
+        currencyCode: result.currencyCode || priceChangeInfo.value.currencyCode,
+        alternativeToken: result.alternativeToken,
+        warnings: result.warnings,
+      }
+      // Модалка уже открыта, просто обновляем данные
       submitting.value = false
+      toast.add({
+        id: 'booking-price-changed-again',
+        title: 'Условия снова изменились',
+        description: 'Цена обновлена. Проверьте новую стоимость.',
+        color: 'warning',
+      })
       return
     }
 
     // Нет доступности
     if (result?.noAvailability) {
+      priceChangedModal.value = false
       priceChangeInfo.value = null
       noAvailabilityMessage.value = result.message || 'Номера по выбранным условиям закончились. Вернитесь к поиску.'
       noAvailabilityModal.value = true
@@ -588,6 +629,7 @@ async function acceptAlternativeBooking() {
     // Бронь создана — переходим на страницу успеха
     const bookingNumber = result?.created?.booking?.number
     if (bookingNumber) {
+      priceChangedModal.value = false
       priceChangeInfo.value = null
       navigateTo({
         path: '/hotels/booking/success',
@@ -596,10 +638,12 @@ async function acceptAlternativeBooking() {
       return
     }
 
+    priceChangedModal.value = false
     priceChangeInfo.value = null
     bookingError.value = 'Не удалось создать бронирование. Попробуйте ещё раз.'
   } catch (error) {
     const message = resolveErrorMessage(error)
+    priceChangedModal.value = false
     bookingError.value = message
     toast.add({
       id: 'booking-error',
@@ -1032,6 +1076,7 @@ if (hotelError.value) {
             block
             size="lg"
             :loading="submitting"
+            :disabled="Boolean(priceChangedModal || priceChangeInfo?.alternativeToken)"
             @click="submitBooking"
           >
             Оплатить
