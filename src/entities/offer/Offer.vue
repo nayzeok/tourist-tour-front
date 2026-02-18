@@ -203,7 +203,7 @@ function handleBook(option: RoomOffer) {
           :key="amenity.code"
           class="flex items-center gap-2 rounded-full bg-gray-800/10 px-2 py-1 text-gray-800"
         >
-          <UIcon :name="hotelAmenities[amenity.code]?.icon" />
+          <UIcon :name="hotelAmenities[amenity.code]?.icon || 'lucide:circle-help'" />
 
           <span class="text-sm">
             {{ hotelAmenities[amenity.code]?.title ?? amenity.name ?? amenity.code }}

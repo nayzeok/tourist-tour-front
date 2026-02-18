@@ -340,7 +340,7 @@ function goToHotel() {
           >
             <UIcon
               class="w-4 h-4"
-              :name="hotelAmenities[code as keyof typeof hotelAmenities]?.icon"
+              :name="hotelAmenities[code as keyof typeof hotelAmenities]?.icon || 'lucide:circle-help'"
             />
 
             <!-- 

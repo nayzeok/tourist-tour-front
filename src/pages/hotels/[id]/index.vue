@@ -235,21 +235,10 @@ const basis = computed(() => {
       </div>
       
       <div class="h-80 w-full overflow-hidden lg:overflow-visible flex items-stretch">
-        <UCarousel
-          v-slot="{ item }"
-          arrows
-          :items="[...allImages, ...allImages]"
-          loop
-          :ui="{
-            viewport: 'h-full', // <-- тот самый overflow-hidden
-            container: 'h-full items-stretch flex-1',// <-- переопределяем items-start -> items-stretch
-            item: basis, // <-- слайд = 100% высоты контейнера
-            root: 'w-full  rounded-2xl ',
-            arrows: 'opacity-50'
-          }"
-        >
-          <div class="w-full h-full rounded-2xl bg-cover bg-center" :style="{ backgroundImage: `url(${item})` }" />
-        </UCarousel>
+        <div
+          class="w-full h-full rounded-2xl bg-cover bg-center"
+          :style="{ backgroundImage: `url(${allImages[0] || hotel.property.thumbnail || ''})` }"
+        />
       </div>
 
       <div class="grid lg:grid-cols-[300px_1fr] gap-4">
