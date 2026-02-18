@@ -127,8 +127,18 @@ const openOferta = () => {
           </div>
         </div>
         
-        <div class="w-24 h-24 relative shrink-0">
-          <img alt="qr" src="/qr.png.webp">
+        <div class="flex flex-col items-start gap-3 shrink-0">
+          <div class="w-24 h-24 relative">
+            <img alt="qr" class="footer-qr" src="/qr.png.webp">
+          </div>
+
+          <div class="w-24">
+            <img
+              alt="Эквайринг"
+              class="acquiring-logo"
+              src="/logos/VerticalLogos.png"
+            >
+          </div>
         </div>
       </div>
     </div>
@@ -138,4 +148,24 @@ const openOferta = () => {
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+.footer-qr {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+
+.acquiring-logo {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+}
+</style>
