@@ -315,6 +315,20 @@ function goToHotel() {
             <p class="mt-2 text-gray-500 text-xs">
               {{ hotel.address }}
             </p>
+
+            <!-- Преимущества под отелем -->
+            <div v-if="hotel.amenities?.length" class="flex justify-start gap-2 mt-3 mb-2 flex-wrap">
+              <div
+                v-for="code in hotel.amenities.slice(0, 6)"
+                :key="code"
+                class="flex-center rounded-lg ring-1 ring-gray-200 w-8 h-8 text-[#2d3137] text-xs"
+              >
+                <UIcon
+                  class="w-4 h-4"
+                  :name="hotelAmenities[code as keyof typeof hotelAmenities]?.icon || 'lucide:circle-help'"
+                />
+              </div>
+            </div>
           </div>
 
           <div v-if="hotel.rating || hotel.reviewsCount" class="flex items-center gap-2">
@@ -331,25 +345,6 @@ function goToHotel() {
           </div>
         </div>
 
-        <!-- Удобства -->
-        <div v-if="hotel.amenities?.length" class="flex justify-end gap-2 mb-4">
-          <div
-            v-for="code in hotel.amenities.slice(0, 6)"
-            :key="code"
-            class="flex-center rounded-lg ring-1 ring-gray-200 w-8 h-8 text-[#2d3137] text-xs"
-          >
-            <UIcon
-              class="w-4 h-4"
-              :name="hotelAmenities[code as keyof typeof hotelAmenities]?.icon || 'lucide:circle-help'"
-            />
-
-            <!-- 
-            <span class="hidden sm:inline">
-              {{ hotelAmenities[code as keyof typeof hotelAmenities]?.title }}
-            </span> -->
-          </div>
-        </div>
-        
         <!--        <pre>-->
         <!--          {{ hotel }}-->
         <!--        </pre>-->
@@ -462,6 +457,20 @@ function goToHotel() {
             <p class="mt-2 text-gray-500 text-xs">
               {{ hotel.address }}
             </p>
+
+            <!-- Преимущества под отелем (mobile) -->
+            <div v-if="hotel.amenities?.length" class="flex justify-start gap-2 mt-3 mb-2 flex-wrap">
+              <div
+                v-for="code in hotel.amenities.slice(0, 6)"
+                :key="code"
+                class="flex-center rounded-lg ring-1 ring-gray-200 w-7 h-7 text-[#2d3137] text-xs"
+              >
+                <UIcon
+                  class="w-3.5 h-3.5"
+                  :name="hotelAmenities[code as keyof typeof hotelAmenities]?.icon || 'lucide:circle-help'"
+                />
+              </div>
+            </div>
 
             <div v-if="hotel.checkInTime || hotel.checkOutTime" class="mt-1 text-gray-600 text-xs flex items-center gap-1">
               <UIcon class="w-3 h-3" name="i-lucide-clock" />

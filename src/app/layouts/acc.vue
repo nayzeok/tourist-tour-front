@@ -26,13 +26,6 @@ const accMenu = computed(() => {
     })
   }
 
-  // Ссылка на кабинет авиабилетов для всех
-  baseMenu.push({
-    title: 'Войти в кабинет авиабилетов',
-    url: 'https://www.agent.ru/air',
-    external: true,
-  } as any)
-
   baseMenu.push({
     title: 'Изменить пароль',
     url: '/acc/change-password',

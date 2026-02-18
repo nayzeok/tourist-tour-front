@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { hotelAmenities } from '~/src/shared/constants/index.js'
 import { useImageUrl } from '~/src/shared/utils/imageUrl'
 
 export type Amenity = {
@@ -197,19 +196,6 @@ function handleBook(option: RoomOffer) {
         {{ primaryOffer?.roomTypeName }}
       </div>
 
-      <div class="flex flex-wrap gap-1">
-        <div
-          v-for="amenity in primaryOffer?.amenities ?? []"
-          :key="amenity.code"
-          class="flex items-center gap-2 rounded-full bg-gray-800/10 px-2 py-1 text-gray-800"
-        >
-          <UIcon :name="hotelAmenities[amenity.code]?.icon || 'lucide:circle-help'" />
-
-          <span class="text-sm">
-            {{ hotelAmenities[amenity.code]?.title ?? amenity.name ?? amenity.code }}
-          </span>
-        </div>
-      </div>
     </div>
 
     <div class="flex w-full items-start gap-4 overflow-x-auto rounded-2xl bg-gray-100 p-4">

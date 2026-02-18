@@ -176,6 +176,43 @@ const offers = computed(() => {
   }, {})
 })
 
+const propertyAmenities = computed(() => {
+  const rawPropertyAmenities = hotel.value?.property?.amenities ?? []
+  const rawRoomAmenities = (hotel.value?.offers ?? []).flatMap(
+    (o: any) => o?.amenities ?? [],
+  )
+
+  const source =
+    rawPropertyAmenities.length > 0 ? rawPropertyAmenities : rawRoomAmenities
+
+  const normalized = source
+    .map((a: any) => {
+      const code =
+        typeof a === 'string'
+          ? a
+          : String(a?.code ?? a?.id ?? '').trim()
+      if (!code) return null
+
+      const dictItem = hotelAmenities[code as keyof typeof hotelAmenities]
+      const fallbackTitle =
+        typeof a === 'string'
+          ? code
+          : a?.displayName || a?.name || code
+
+      return {
+        code,
+        icon: dictItem?.icon || 'lucide:circle-help',
+        title: dictItem?.title || fallbackTitle,
+      }
+    })
+    .filter(Boolean) as Array<{ code: string; icon: string; title: string }>
+
+  // Убираем дубли по коду
+  return normalized.filter(
+    (item, idx, arr) => arr.findIndex((x) => x.code === item.code) === idx,
+  )
+})
+
 const basis = computed(() => {
   return viewport.isLessThan('md') ? 'basis-1/1 h-full' : 'basis-1/3 h-full'
 })
@@ -232,6 +269,22 @@ const basis = computed(() => {
             </UButton>
           </div>
         </div>
+
+        <div v-if="propertyAmenities.length" class="mt-4">
+          <USeparator class="mb-3" />
+          <div class="flex flex-wrap gap-2">
+            <div
+              v-for="amenity in propertyAmenities"
+              :key="amenity.code"
+              class="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-gray-700"
+            >
+              <UIcon :name="amenity.icon" class="w-4 h-4" />
+              <span class="text-xs">
+                {{ amenity.title }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
       
       <div class="h-80 w-full overflow-hidden lg:overflow-visible flex items-stretch">
@@ -241,8 +294,8 @@ const basis = computed(() => {
         />
       </div>
 
-      <div class="grid lg:grid-cols-[300px_1fr] gap-4">
-        <div class="rounded-2xl bg-white p-4 flex flex-col justify-between gap-1">
+      <div class="grid gap-4">
+        <div class="rounded-2xl bg-white p-4 flex flex-col justify-between gap-1 lg:max-w-[300px]">
           <div class="flex flex-col gap-1">
             <div class="text-sm text-gray-500">
               Заезд
@@ -262,40 +315,6 @@ const basis = computed(() => {
 
             <div class="font-semibold text-primary">
               {{ route.query.dates?.split('-')[1] }}
-            </div>
-          </div>
-        </div>
-      
-        <div class="rounded-2xl bg-white p-4">
-          <div class="font-medium text-md mb-2">
-            Популярные удобства
-          </div>
-
-          <USeparator class="mb-4" />
-        
-          <div class="flex flex-col justify-between gap-1">
-            <div class="flex text-gray-600 items-center gap-2">
-              <UIcon :name="hotelAmenities['parking'].icon" />
-              
-              <span>
-                {{ hotelAmenities['parking'].title }}
-              </span>
-            </div>
-
-            <div class="flex text-gray-600 items-center gap-2">
-              <UIcon :name="hotelAmenities['wifi_internet'].icon" />
-
-              <span>
-                {{ hotelAmenities['wifi_internet'].title }}
-              </span>
-            </div>
-
-            <div class="flex text-gray-600 items-center gap-2">
-              <UIcon :name="hotelAmenities['swimming_pool'].icon" />
-
-              <span>
-                {{ hotelAmenities['swimming_pool'].title }}
-              </span>
             </div>
           </div>
         </div>

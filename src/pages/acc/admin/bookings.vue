@@ -82,6 +82,17 @@ const getUserDisplayName = (user: AdminBooking['user']) => {
   const parts = [user.firstName, user.lastName].filter(Boolean).join(' ').trim()
   return parts || user.email
 }
+
+const formatBookingStatus = (status?: string | null) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'cancelled' || normalized === 'canceled') {
+    return 'Отменено'
+  }
+  if (normalized === 'confirmed') {
+    return 'Подтверждено'
+  }
+  return status || '—'
+}
 </script>
 
 <template>
@@ -123,7 +134,7 @@ const getUserDisplayName = (user: AdminBooking['user']) => {
                 Бронирование № {{ booking.number }}
               </p>
               <p class="text-lg font-semibold">
-                {{ booking.status }}
+                {{ formatBookingStatus(booking.status) }}
               </p>
             </div>
             <div

@@ -50,6 +50,17 @@ const canCancelBooking = (booking: UserBooking) => {
   return s !== 'cancelled' && s !== 'canceled' && s !== 'отменено'
 }
 
+const formatBookingStatus = (status?: string | null) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'cancelled' || normalized === 'canceled') {
+    return 'Отменено'
+  }
+  if (normalized === 'confirmed') {
+    return 'Подтверждено'
+  }
+  return status || '—'
+}
+
 const extractErrorMessage = (error: unknown) => {
   if (error && typeof error === 'object' && 'data' in error) {
     const data = (error as { data?: { message?: string } }).data
@@ -187,7 +198,7 @@ const confirmCancel = async () => {
                 Бронирование № {{ booking.number }}
               </p>
               <p class="text-lg font-semibold">
-                {{ booking.status }}
+                {{ formatBookingStatus(booking.status) }}
               </p>
             </div>
             <div
