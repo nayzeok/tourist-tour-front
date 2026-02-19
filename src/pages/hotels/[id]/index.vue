@@ -253,21 +253,8 @@ const basis = computed(() => {
           </div>
         </div>
 
-        <div class="flex items-center justify-between">
-          <div class="text-gray-600 text-sm">
-            {{ hotel.property.address }}
-          </div>
-
-          <div class="flex-center">
-            <UButton
-              color="neutral"
-              icon="lucide:heart"
-              size="sm"
-              variant="soft"
-            >
-              Добавить в избранное
-            </UButton>
-          </div>
+        <div class="text-gray-600 text-sm">
+          {{ hotel.property.address }}
         </div>
 
         <div v-if="propertyAmenities.length" class="mt-4">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useImageUrl } from '~/src/shared/utils/imageUrl'
+import { hotelAmenities } from '~/src/shared/constants'
 
 export type Amenity = {
   code: string
@@ -132,6 +133,38 @@ const paymentBadge = computed(() => {
   }
 })
 
+const isAmenitiesExpanded = ref(false)
+
+const roomAmenities = computed(() => {
+  const source = (props.offer ?? []).flatMap((option) => option.amenities ?? [])
+
+  const normalized = source
+    .map((amenity) => {
+      const code =
+        typeof amenity === 'string'
+          ? amenity
+          : String((amenity as Amenity)?.code ?? '').trim()
+      if (!code) return null
+
+      const dictItem = hotelAmenities[code as keyof typeof hotelAmenities]
+      const fallbackTitle =
+        typeof amenity === 'string' ? amenity : (amenity as Amenity)?.name || code
+
+      return {
+        code,
+        title: dictItem?.title || fallbackTitle,
+        icon: dictItem?.icon || 'lucide:circle-help',
+      }
+    })
+    .filter(Boolean) as Array<{ code: string; title: string; icon: string }>
+
+  return normalized.filter(
+    (item, idx, arr) => arr.findIndex((x) => x.code === item.code) === idx,
+  )
+})
+
+const hasAmenitiesToggle = computed(() => roomAmenities.value.length > 10)
+
 function openModalPhoto() {
   galleryOpen.value = true
 }
@@ -198,80 +231,111 @@ function handleBook(option: RoomOffer) {
 
     </div>
 
-    <div class="flex w-full items-start gap-4 overflow-x-auto rounded-2xl bg-gray-100 p-4">
-      <div
-        v-for="option in offer"
-        :key="option.ratePlanId"
-        class="flex h-full min-w-[280px] flex-col gap-4 rounded-2xl bg-white p-4"
-      >
-        <div class="flex flex-1 items-start gap-4">
-          <div class="flex flex-1 flex-col gap-1">
-            <div
-              class="flex items-center gap-1.5"
-              :class="mealBadge.positive ? 'text-green-700' : 'text-gray-700'"
-            >
-              <UIcon
-                class="h-5 w-5"
-                :class="mealBadge.positive ? 'text-green-600' : 'text-gray-600'"
-                :name="mealBadge.icon"
-              />
+    <div class="flex w-full flex-col gap-3">
+      <div class="flex w-full items-start gap-4 overflow-x-auto rounded-2xl bg-gray-100 p-4">
+        <div
+          v-for="option in offer"
+          :key="option.ratePlanId"
+          class="flex h-full min-w-[280px] flex-col gap-4 rounded-2xl bg-white p-4"
+        >
+          <div class="flex flex-1 items-start gap-4">
+            <div class="flex flex-1 flex-col gap-1">
+              <div
+                class="flex items-center gap-1.5"
+                :class="mealBadge.positive ? 'text-green-700' : 'text-gray-700'"
+              >
+                <UIcon
+                  class="h-5 w-5"
+                  :class="mealBadge.positive ? 'text-green-600' : 'text-gray-600'"
+                  :name="mealBadge.icon"
+                />
 
-              <span class="truncate text-sm font-medium">
-                {{ mealBadge.text }}
-              </span>
-            </div>
-
-            <USeparator />
-
-            <div
-              class="flex items-center gap-1.5"
-              :class="cancelBadge.positive ? 'text-green-700' : 'text-gray-700'"
-            >
-              <UIcon
-                class="h-5 w-5"
-                :class="cancelBadge.positive ? 'text-green-600' : 'text-gray-600'"
-                :name="cancelBadge.icon"
-              />
-
-              <span class="truncate text-sm font-medium">
-                {{ cancelBadge.text }}
-              </span>
-            </div>
-
-            <USeparator />
-
-            <div class="flex items-center gap-1.5 text-gray-700">
-              <UIcon class="h-5 w-5 text-gray-600" :name="paymentBadge.icon" />
-              <span class="truncate text-sm font-medium">{{ paymentBadge.text }}</span>
-            </div>
-
-            <template v-if="option.fullPlacementsName">
-              <USeparator />
-              <div class="flex items-center gap-1.5 text-gray-700">
-                <UIcon class="h-5 w-5 text-gray-600 shrink-0" name="i-lucide-bed-double" />
-                <span class="truncate text-sm font-medium">{{ option.fullPlacementsName }}</span>
+                <span class="truncate text-sm font-medium">
+                  {{ mealBadge.text }}
+                </span>
               </div>
-            </template>
+
+              <USeparator />
+
+              <div
+                class="flex items-center gap-1.5"
+                :class="cancelBadge.positive ? 'text-green-700' : 'text-gray-700'"
+              >
+                <UIcon
+                  class="h-5 w-5"
+                  :class="cancelBadge.positive ? 'text-green-600' : 'text-gray-600'"
+                  :name="cancelBadge.icon"
+                />
+
+                <span class="truncate text-sm font-medium">
+                  {{ cancelBadge.text }}
+                </span>
+              </div>
+
+              <USeparator />
+
+              <div class="flex items-center gap-1.5 text-gray-700">
+                <UIcon class="h-5 w-5 text-gray-600" :name="paymentBadge.icon" />
+                <span class="truncate text-sm font-medium">{{ paymentBadge.text }}</span>
+              </div>
+
+              <template v-if="option.fullPlacementsName">
+                <USeparator />
+                <div class="flex items-center gap-1.5 text-gray-700">
+                  <UIcon class="h-5 w-5 text-gray-600 shrink-0" name="i-lucide-bed-double" />
+                  <span class="truncate text-sm font-medium">{{ option.fullPlacementsName }}</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="flex flex-col">
+            <span class="text-2xl font-semibold">
+              {{ option.price.perNight.toLocaleString('ru-RU') }} ₽
+            </span>
+            <span class="text-xs font-medium text-gray-600">
+              За ночь
+            </span>
+          </div>
+
+          <UButton block :disabled="!option.availability" @click="handleBook(option)">
+            Забронировать
+          </UButton>
+        </div>
+      </div>
+
+      <div v-if="roomAmenities.length" class="w-full rounded-2xl p-3">
+        <div
+          class="amenities-wrap flex flex-wrap gap-2 transition-all duration-200"
+          :class="{ collapsed: !isAmenitiesExpanded }"
+        >
+          <div
+            v-for="amenity in roomAmenities"
+            :key="amenity.code"
+            class="flex items-center gap-2 rounded-full bg-gray-200 px-3 py-1 text-gray-700"
+          >
+            <UIcon :name="amenity.icon || 'lucide:circle-help'" class="h-4 w-4" />
+            <span class="text-xs font-medium">{{ amenity.title }}</span>
           </div>
         </div>
 
-        <div class="flex flex-col">
-          <span class="text-2xl font-semibold">
-            {{ option.price.perNight.toLocaleString('ru-RU') }} ₽
-          </span>
-          <span class="text-xs font-medium text-gray-600">
-            За ночь
-          </span>
+        <div v-if="hasAmenitiesToggle" class="mt-2 flex justify-end">
+          <button
+            class="text-sm font-medium text-primary hover:opacity-80"
+            type="button"
+            @click="isAmenitiesExpanded = !isAmenitiesExpanded"
+          >
+            {{ isAmenitiesExpanded ? 'Свернуть' : 'Ещё' }}
+          </button>
         </div>
-
-        <UButton block :disabled="!option.availability" @click="handleBook(option)">
-          Забронировать
-        </UButton>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-
+.amenities-wrap.collapsed {
+  max-height: 88px;
+  overflow: hidden;
+}
 </style>
