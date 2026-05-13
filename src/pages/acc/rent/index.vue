@@ -195,12 +195,12 @@ async function cancelBooking(id: string) {
       >
         <div class="flex gap-4 p-4">
           <!-- Фото -->
-          <div class="w-28 h-20 rounded-xl overflow-hidden bg-gray-50 flex-shrink-0">
+          <div class="rounded-xl overflow-hidden bg-gray-50 flex-shrink-0" style="width:112px;height:80px;min-width:112px;position:relative">
             <img
               v-if="b.carImage"
               :src="b.carImage"
               :alt="b.carName"
-              class="w-full h-full object-cover"
+              style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain"
             >
             <div v-else class="w-full h-full flex items-center justify-center text-3xl">
               🚗

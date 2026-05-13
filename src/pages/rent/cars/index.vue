@@ -40,7 +40,7 @@ const { data: cars, status, error, refresh } = await useAsyncData<RentCar[]>(
   async () => {
     if (!city.value || !startDate.value || !endDate.value) return []
     try {
-      return await searchRentCars({ cityId: city.value, startDate: startDate.value, endDate: endDate.value })
+      return await searchRentCars({ city: city.value, startDate: startDate.value, endDate: endDate.value })
     } catch {
       return []
     }
@@ -52,28 +52,6 @@ const isLoading = computed(() => status.value === 'pending')
 const hasError = computed(() => !!error.value)
 const hasCars = computed(() => (cars.value?.length ?? 0) > 0)
 
-// Форма повторного поиска
-const { data: rentCities } = await useAsyncData<string[]>(
-  'rent-cities',
-  () => $fetch(`${useRuntimeConfig().public.apiUrl}/rent/cities`).catch(() => []),
-  { default: () => [] },
-)
-
-const selectedCity = ref(city.value)
-const startInput = ref(startDate.value)
-const endInput = ref(endDate.value)
-const searching = ref(false)
-
-async function search() {
-  if (!selectedCity.value || !startInput.value || !endInput.value) return
-  searching.value = true
-  await router.push({
-    path: '/rent/cars',
-    query: { city: selectedCity.value, startDate: startInput.value, endDate: endInput.value },
-  })
-  searching.value = false
-}
-
 function openCar(car: RentCar) {
   router.push({
     path: `/rent/cars/${car.id}`,
@@ -84,53 +62,12 @@ function openCar(car: RentCar) {
 
 <template>
   <div>
-    <!-- Шапка с формой -->
-    <div class="bg-primary py-5 px-4 lg:px-0">
-      <div class="container">
-        <div class="bg-white rounded-2xl p-3 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto] items-end">
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-400 px-1">Город</label>
-            <USelectMenu
-              v-model="selectedCity"
-              :items="rentCities || []"
-              placeholder="Выберите город"
-              size="lg"
-              :ui="{ base: 'h-11 rounded-xl' }"
-            />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-400 px-1">Начало аренды</label>
-            <input
-              v-model="startInput"
-              class="h-11 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:border-primary transition"
-              type="datetime-local"
-            >
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-400 px-1">Завершение аренды</label>
-            <input
-              v-model="endInput"
-              class="h-11 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:border-primary transition"
-              type="datetime-local"
-            >
-          </div>
-          <button
-            class="h-11 px-6 bg-primary text-white font-semibold rounded-xl hover:opacity-90 transition disabled:opacity-50 text-sm whitespace-nowrap"
-            :disabled="!selectedCity || !startInput || !endInput || searching || isLoading"
-            @click="search"
-          >
-            {{ searching ? 'Поиск...' : 'Найти' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div class="container py-8">
       <!-- Заголовок результатов -->
       <div class="flex items-center justify-between mb-6">
         <div>
           <h1 class="text-2xl font-bold">
-            {{ selectedCity ? `Аренда авто в ${selectedCity}` : 'Аренда автомобилей' }}
+            {{ city ? `Аренда авто в ${city}` : 'Аренда автомобилей' }}
           </h1>
           <p v-if="startDate && endDate" class="text-sm text-gray-500 mt-1">
             {{ formatDatetime(startDate) }} — {{ formatDatetime(endDate) }}
@@ -191,12 +128,12 @@ function openCar(car: RentCar) {
         <p class="text-lg font-medium mb-2">Нет доступных автомобилей</p>
         <p class="text-sm mb-6">Попробуйте изменить даты или выбрать другой город</p>
         <div class="flex gap-3 justify-center">
-          <button
+          <NuxtLink
+            to="/rent"
             class="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:border-primary hover:text-primary transition"
-            @click="search()"
           >
-            Изменить даты
-          </button>
+            Изменить поиск
+          </NuxtLink>
           <NuxtLink
             to="/rent"
             class="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition"
@@ -215,16 +152,19 @@ function openCar(car: RentCar) {
           @click="openCar(car)"
         >
           <!-- Фото -->
-          <div class="h-44 bg-gradient-to-br from-blue-50 to-blue-100 overflow-hidden relative">
+          <div class="h-44 bg-gray-50 overflow-hidden relative">
             <img
               v-if="car.images?.[0]"
               :src="car.images[0]"
               :alt="car.name"
-              class="w-full h-full object-cover"
+              class="w-full h-full object-contain p-2"
             >
             <div v-else class="w-full h-full flex items-center justify-center">
               <span class="text-6xl">🚗</span>
             </div>
+            <span v-if="car.class" class="absolute top-2 left-2 text-xs bg-black/40 text-white px-2 py-0.5 rounded-lg backdrop-blur-sm">
+              {{ car.class }}
+            </span>
           </div>
 
           <!-- Контент -->
@@ -234,16 +174,16 @@ function openCar(car: RentCar) {
 
             <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
               <div>
+                <span class="text-gray-400 text-xs block">КПП</span>
+                <span class="font-medium">{{ car.transmission || '—' }}</span>
+              </div>
+              <div>
+                <span class="text-gray-400 text-xs block">Топливо</span>
+                <span class="font-medium">{{ car.fuel || '—' }}</span>
+              </div>
+              <div>
                 <span class="text-gray-400 text-xs block">Пробег/день</span>
-                <span class="font-medium">{{ car.mileagePerDay ? car.mileagePerDay + ' км' : '—' }}</span>
-              </div>
-              <div>
-                <span class="text-gray-400 text-xs block">Залог</span>
-                <span class="font-medium">{{ car.deposit ? formatPrice(car.deposit) : '—' }}</span>
-              </div>
-              <div>
-                <span class="text-gray-400 text-xs block">Мин. срок</span>
-                <span class="font-medium">{{ car.minRentDays }} {{ daysWord(car.minRentDays) }}</span>
+                <span class="font-medium">{{ car.mileagePerDay ? car.mileagePerDay + ' км' : 'без лимита' }}</span>
               </div>
               <div>
                 <span class="text-gray-400 text-xs block">Стоимость от</span>

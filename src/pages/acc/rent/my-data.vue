@@ -22,21 +22,19 @@ const { data: profile, refresh } = await useAsyncData<UserProfile | null>(
 )
 
 const isLocked = computed(() => !!profile.value?.isLocked)
-const form = ref<UserProfile>({})
+const form = ref<UserProfile>(profile.value ? { ...profile.value } : {})
 const saving = ref(false)
 const saveError = ref<string | null>(null)
 const savedOk = ref(false)
+
+watch(profile, (val) => {
+  if (val) form.value = { ...val }
+}, { immediate: true })
 
 // Попап запроса на изменение
 const changeRequestOpen = ref(false)
 const sendingRequest = ref(false)
 const requestSent = ref(false)
-
-onMounted(() => {
-  if (profile.value) {
-    form.value = { ...profile.value }
-  }
-})
 
 async function save() {
   saving.value = true
@@ -60,9 +58,13 @@ async function save() {
 async function sendChangeRequest() {
   sendingRequest.value = true
   try {
-    // Отправляем email-уведомление администратору (реализуется позже)
-    await new Promise(r => setTimeout(r, 800))
+    await $fetch(`${apiUrl}/rent-user/profile/change-request`, {
+      method: 'POST',
+      credentials: 'include',
+    })
     requestSent.value = true
+  } catch {
+    alert('Не удалось отправить заявку. Попробуйте позже.')
   } finally {
     sendingRequest.value = false
   }

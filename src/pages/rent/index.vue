@@ -3,49 +3,18 @@ definePageMeta({ layout: 'default' })
 
 const router = useRouter()
 
-// --- Города из API ---
+// --- Города из API (для кнопок городов) ---
 const { data: rentCities } = await useAsyncData<string[]>(
   'rent-cities',
   () => $fetch(`${useRuntimeConfig().public.apiUrl}/rent/cities`).catch(() => []),
   { default: () => [] },
 )
 
-// --- Форма поиска ---
-const selectedCity = ref('')
-const cityDropdownOpen = ref(false)
-const startDate = ref('')
-const endDate = ref('')
-const searching = ref(false)
-
-const tomorrow = computed(() => {
+async function searchCity(city: string) {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 16)
-})
-const dayAfter = computed(() => {
-  const d = new Date()
-  d.setDate(d.getDate() + 3)
-  return d.toISOString().slice(0, 16)
-})
-
-onMounted(() => {
-  startDate.value = tomorrow.value
-  endDate.value = dayAfter.value
-})
-
-function selectCity(city: string) {
-  selectedCity.value = city
-  cityDropdownOpen.value = false
-}
-
-async function search() {
-  if (!selectedCity.value || !startDate.value || !endDate.value) return
-  searching.value = true
-  await router.push({
-    path: '/rent/cars',
-    query: { city: selectedCity.value, startDate: startDate.value, endDate: endDate.value },
-  })
-  searching.value = false
+  const start = d.toISOString().slice(0, 16)
+  await router.push({ path: '/rent/cars', query: { city, startDate: start } })
 }
 
 // --- FAQ ---
@@ -78,11 +47,6 @@ const exampleCars = [
   { name: 'Hyundai Creta', price: 3900, deposit: 20000, mileage: 200, minDays: 2 },
 ]
 
-const cities = [
-  'Москва', 'Санкт-Петербург', 'Сочи', 'Краснодар',
-  'Казань', 'Екатеринбург', 'Новосибирск', 'Уфа',
-]
-
 function formatPrice(n: number) {
   return n.toLocaleString('ru-RU') + ' ₽'
 }
@@ -90,77 +54,6 @@ function formatPrice(n: number) {
 
 <template>
   <div>
-    <!-- ====== HERO ====== -->
-    <section class="bg-primary rounded-b-[48px] pt-8 pb-16 px-4 lg:px-0">
-      <div class="container text-white">
-        <h1 class="text-3xl lg:text-5xl font-bold leading-tight mb-3">
-          Забронируйте автомобиль<br class="hidden lg:block"> в нужном городе онлайн
-        </h1>
-        <p class="text-blue-100 text-base lg:text-lg mb-8">
-          Выберите город, даты и подходящий автомобиль — за несколько минут
-        </p>
-
-        <!-- Форма поиска -->
-        <div class="bg-white rounded-2xl p-4 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto] text-gray-900">
-          <div class="flex flex-col gap-1 relative">
-            <label class="text-xs text-gray-500 font-medium px-1">Город</label>
-            <button
-              class="h-12 rounded-xl border border-gray-200 bg-white px-3 text-left flex items-center justify-between focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition text-gray-900"
-              type="button"
-              @click="cityDropdownOpen = !cityDropdownOpen"
-            >
-              <span :class="selectedCity ? 'text-gray-900' : 'text-gray-400'">{{ selectedCity || 'Выберите город' }}</span>
-              <span class="text-gray-400 text-sm">▾</span>
-            </button>
-            <div
-              v-if="cityDropdownOpen"
-              class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden"
-            >
-              <button
-                v-for="city in rentCities"
-                :key="city"
-                class="w-full px-4 py-2.5 text-left text-sm hover:bg-blue-50 hover:text-primary transition"
-                :class="{ 'bg-blue-50 text-primary font-medium': selectedCity === city }"
-                type="button"
-                @click="selectCity(city)"
-              >
-                {{ city }}
-              </button>
-              <div v-if="!rentCities?.length" class="px-4 py-3 text-sm text-gray-400">
-                Загрузка городов...
-              </div>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-500 font-medium px-1">Начало аренды</label>
-            <input
-              v-model="startDate"
-              class="h-12 rounded-xl border border-gray-200 px-3 text-gray-900 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition"
-              type="datetime-local"
-            >
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-500 font-medium px-1">Завершение аренды</label>
-            <input
-              v-model="endDate"
-              class="h-12 rounded-xl border border-gray-200 px-3 text-gray-900 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition"
-              type="datetime-local"
-            >
-          </div>
-
-          <button
-            class="h-12 mt-5 lg:mt-auto px-8 bg-primary text-white font-bold rounded-xl hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
-            :disabled="!selectedCity || !startDate || !endDate || searching"
-            @click="search"
-          >
-            {{ searching ? 'Поиск...' : 'Найти автомобиль' }}
-          </button>
-        </div>
-      </div>
-    </section>
-
     <!-- ====== КАК ЭТО РАБОТАЕТ ====== -->
     <section class="container py-12 lg:py-16">
       <h2 class="text-2xl lg:text-3xl font-bold mb-8 text-center">
@@ -186,12 +79,12 @@ function formatPrice(n: number) {
       <div class="container">
         <div class="flex items-end justify-between mb-8">
           <h2 class="text-2xl lg:text-3xl font-bold">Доступные автомобили</h2>
-          <button
+          <NuxtLink
+            to="/rent/cars"
             class="text-primary text-sm font-medium hover:underline"
-            @click="search"
           >
             Смотреть все →
-          </button>
+          </NuxtLink>
         </div>
 
         <div class="grid lg:grid-cols-3 gap-5">
@@ -223,12 +116,12 @@ function formatPrice(n: number) {
                   <span class="font-medium text-primary">{{ formatPrice(car.price) }}/день</span>
                 </div>
               </div>
-              <button
-                class="w-full h-10 bg-primary text-white font-medium rounded-xl hover:opacity-90 transition text-sm"
-                @click="search"
+              <NuxtLink
+                to="/rent/cars"
+                class="block w-full h-10 bg-primary text-white font-medium rounded-xl hover:opacity-90 transition text-sm flex items-center justify-center"
               >
                 Подробнее
-              </button>
+              </NuxtLink>
             </div>
           </div>
         </div>
@@ -246,7 +139,7 @@ function formatPrice(n: number) {
           v-for="city in rentCities"
           :key="city"
           class="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium hover:border-primary hover:text-primary transition"
-          @click="selectedCity = city; search()"
+          @click="searchCity(city)"
         >
           {{ city }}
         </button>
@@ -266,12 +159,12 @@ function formatPrice(n: number) {
             <div class="text-4xl mb-3">🚗</div>
             <h3 class="font-bold text-lg mb-2">Аренда авто</h3>
             <p class="text-sm text-gray-500 mb-4">Выбирайте автомобиль по городу, датам и бюджету</p>
-            <button
-              class="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition"
-              @click="search"
+            <NuxtLink
+              to="/rent/cars"
+              class="inline-block px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition"
             >
               Найти автомобиль
-            </button>
+            </NuxtLink>
           </div>
           <div class="bg-white rounded-2xl p-6 border border-blue-100">
             <div class="text-4xl mb-3">🏨</div>

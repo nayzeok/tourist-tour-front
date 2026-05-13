@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { getRentCar, createRentBooking } from '~/src/shared/api/rent'
 import type { RentCar } from '~/src/shared/types/rent'
+import { useAuthStore } from '~/src/shared/store'
 
 definePageMeta({ layout: 'default' })
+
+const auth = useAuthStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -83,6 +86,11 @@ const booking = ref(false)
 
 function openBooking() {
   formError.value = null
+  form.value = {
+    firstName: auth.user?.firstName || '',
+    lastName: auth.user?.lastName || '',
+    phone: auth.user?.phone || '',
+  }
   bookingOpen.value = true
 }
 
@@ -168,12 +176,12 @@ function goBack() {
       <!-- ЛЕВАЯ ЧАСТЬ -->
       <div>
         <!-- Галерея -->
-        <div class="rounded-2xl overflow-hidden bg-gray-100 h-64 lg:h-80 mb-3 relative">
+        <div class="rounded-2xl overflow-hidden bg-gray-50 h-64 lg:h-80 mb-3 relative">
           <img
             v-if="car.images?.[activePhoto]"
             :src="car.images[activePhoto]"
             :alt="car.name"
-            class="w-full h-full object-cover"
+            class="w-full h-full object-contain p-3"
           >
           <div v-else class="w-full h-full flex items-center justify-center text-7xl">🚗</div>
         </div>
@@ -189,15 +197,45 @@ function goBack() {
           </button>
         </div>
 
-        <!-- Марка и характеристики -->
+        <!-- Заголовок -->
         <div class="mt-6">
           <h1 class="text-2xl lg:text-3xl font-bold mb-1">{{ car.brand }} {{ car.model }}</h1>
-          <div v-if="car.year || car.class || car.bodyType || car.transmission || car.fuel" class="flex flex-wrap gap-2 mt-2">
+          <div class="flex flex-wrap gap-2 mt-2">
             <span v-if="car.year" class="text-xs px-2.5 py-1 bg-gray-100 rounded-full text-gray-600">{{ car.year }} г.</span>
             <span v-if="car.class" class="text-xs px-2.5 py-1 bg-gray-100 rounded-full text-gray-600">{{ car.class }}</span>
             <span v-if="car.bodyType" class="text-xs px-2.5 py-1 bg-gray-100 rounded-full text-gray-600">{{ car.bodyType }}</span>
-            <span v-if="car.transmission" class="text-xs px-2.5 py-1 bg-gray-100 rounded-full text-gray-600">{{ car.transmission }}</span>
-            <span v-if="car.fuel" class="text-xs px-2.5 py-1 bg-gray-100 rounded-full text-gray-600">{{ car.fuel }}</span>
+            <span v-if="car.color" class="text-xs px-2.5 py-1 bg-gray-100 rounded-full text-gray-600">{{ car.color }}</span>
+          </div>
+        </div>
+
+        <!-- Характеристики автомобиля -->
+        <div class="mt-6">
+          <h2 class="text-lg font-bold mb-3">Характеристики</h2>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div v-if="car.transmission" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-xs text-gray-400 mb-0.5">Коробка передач</p>
+              <p class="text-sm font-semibold">{{ car.transmission }}</p>
+            </div>
+            <div v-if="car.fuel" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-xs text-gray-400 mb-0.5">Тип топлива</p>
+              <p class="text-sm font-semibold">{{ car.fuel }}</p>
+            </div>
+            <div v-if="car.engineCapacity" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-xs text-gray-400 mb-0.5">Объём двигателя</p>
+              <p class="text-sm font-semibold">{{ car.engineCapacity }}</p>
+            </div>
+            <div v-if="car.enginePower" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-xs text-gray-400 mb-0.5">Мощность</p>
+              <p class="text-sm font-semibold">{{ car.enginePower }} л.с.</p>
+            </div>
+            <div v-if="car.driveUnit" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-xs text-gray-400 mb-0.5">Привод</p>
+              <p class="text-sm font-semibold">{{ car.driveUnit }}</p>
+            </div>
+            <div v-if="car.seats" class="bg-gray-50 rounded-xl p-3">
+              <p class="text-xs text-gray-400 mb-0.5">Количество мест</p>
+              <p class="text-sm font-semibold">{{ car.seats }}</p>
+            </div>
           </div>
         </div>
 
@@ -206,8 +244,24 @@ function goBack() {
           <h2 class="text-lg font-bold">Условия аренды</h2>
 
           <div class="grid sm:grid-cols-2 gap-3">
+            <div v-if="car.mileagePerDay" class="bg-gray-50 rounded-xl p-4">
+              <p class="text-xs text-gray-400 mb-1">Включённый пробег</p>
+              <p class="text-sm font-medium">{{ car.mileagePerDay }} км/день</p>
+            </div>
+            <div v-if="car.deposit" class="bg-gray-50 rounded-xl p-4">
+              <p class="text-xs text-gray-400 mb-1">Страховой депозит</p>
+              <p class="text-sm font-medium">{{ formatPrice(car.deposit) }}</p>
+            </div>
+            <div v-if="car.franchise" class="bg-gray-50 rounded-xl p-4">
+              <p class="text-xs text-gray-400 mb-1">Страховая франшиза</p>
+              <p class="text-sm font-medium">{{ formatPrice(car.franchise) }}</p>
+            </div>
+            <div v-if="car.insurance" class="bg-gray-50 rounded-xl p-4">
+              <p class="text-xs text-gray-400 mb-1">Страховка</p>
+              <p class="text-sm font-medium">{{ car.insurance }}</p>
+            </div>
             <div v-if="car.minAge || car.minExperience" class="bg-gray-50 rounded-xl p-4">
-              <p class="text-xs text-gray-400 mb-1">Требования</p>
+              <p class="text-xs text-gray-400 mb-1">Требования к водителю</p>
               <p class="text-sm font-medium">
                 <span v-if="car.minAge">От {{ car.minAge }} лет</span>
                 <span v-if="car.minAge && car.minExperience"> · </span>
@@ -215,23 +269,11 @@ function goBack() {
               </p>
             </div>
             <div v-if="car.documents" class="bg-gray-50 rounded-xl p-4">
-              <p class="text-xs text-gray-400 mb-1">Документы</p>
+              <p class="text-xs text-gray-400 mb-1">Необходимые документы</p>
               <p class="text-sm font-medium">{{ car.documents }}</p>
             </div>
-            <div v-if="car.insurance" class="bg-gray-50 rounded-xl p-4">
-              <p class="text-xs text-gray-400 mb-1">Страховка</p>
-              <p class="text-sm font-medium">{{ car.insurance }}</p>
-            </div>
-            <div class="bg-gray-50 rounded-xl p-4">
-              <p class="text-xs text-gray-400 mb-1">Депозит</p>
-              <p class="text-sm font-medium">{{ formatPrice(car.deposit) }}</p>
-            </div>
-            <div v-if="car.mileagePerDay" class="bg-gray-50 rounded-xl p-4">
-              <p class="text-xs text-gray-400 mb-1">Включённый пробег</p>
-              <p class="text-sm font-medium">{{ car.mileagePerDay }} км/день</p>
-            </div>
             <div v-if="car.returnFuel" class="bg-gray-50 rounded-xl p-4">
-              <p class="text-xs text-gray-400 mb-1">Топливо</p>
+              <p class="text-xs text-gray-400 mb-1">Условие по топливу</p>
               <p class="text-sm font-medium">{{ car.returnFuel }}</p>
             </div>
           </div>

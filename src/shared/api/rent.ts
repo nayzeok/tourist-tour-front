@@ -5,7 +5,7 @@ export const getRentCities = () =>
   apiFetch<RentCity[]>('/rent/cities')
 
 export const searchRentCars = (params: {
-  cityId: string
+  city: string
   startDate: string
   endDate: string
 }) =>
