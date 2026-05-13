@@ -1,0 +1,264 @@
+<script setup lang="ts">
+import { searchRentCars } from '~/src/shared/api/rent'
+import type { RentCar } from '~/src/shared/types/rent'
+
+definePageMeta({ layout: 'default' })
+
+const route = useRoute()
+const router = useRouter()
+
+const city = computed(() => (route.query.city as string) || '')
+const startDate = computed(() => (route.query.startDate as string) || '')
+const endDate = computed(() => (route.query.endDate as string) || '')
+
+// Количество дней аренды
+const daysCount = computed(() => {
+  if (!startDate.value || !endDate.value) return 0
+  const diff = new Date(endDate.value).getTime() - new Date(startDate.value).getTime()
+  return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+})
+
+function formatDatetime(dt: string) {
+  if (!dt) return '—'
+  const d = new Date(dt)
+  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatPrice(n: number) {
+  return n.toLocaleString('ru-RU') + ' ₽'
+}
+
+function daysWord(n: number) {
+  if (n % 10 === 1 && n % 100 !== 11) return 'день'
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return 'дня'
+  return 'дней'
+}
+
+// Загрузка авто
+const { data: cars, status, error, refresh } = await useAsyncData<RentCar[]>(
+  () => `rent-cars-${city.value}-${startDate.value}-${endDate.value}`,
+  async () => {
+    if (!city.value || !startDate.value || !endDate.value) return []
+    try {
+      return await searchRentCars({ cityId: city.value, startDate: startDate.value, endDate: endDate.value })
+    } catch {
+      return []
+    }
+  },
+  { watch: [city, startDate, endDate] },
+)
+
+const isLoading = computed(() => status.value === 'pending')
+const hasError = computed(() => !!error.value)
+const hasCars = computed(() => (cars.value?.length ?? 0) > 0)
+
+// Форма повторного поиска
+const { data: rentCities } = await useAsyncData<string[]>(
+  'rent-cities',
+  () => $fetch(`${useRuntimeConfig().public.apiUrl}/rent/cities`).catch(() => []),
+  { default: () => [] },
+)
+
+const selectedCity = ref(city.value)
+const startInput = ref(startDate.value)
+const endInput = ref(endDate.value)
+const searching = ref(false)
+
+async function search() {
+  if (!selectedCity.value || !startInput.value || !endInput.value) return
+  searching.value = true
+  await router.push({
+    path: '/rent/cars',
+    query: { city: selectedCity.value, startDate: startInput.value, endDate: endInput.value },
+  })
+  searching.value = false
+}
+
+function openCar(car: RentCar) {
+  router.push({
+    path: `/rent/cars/${car.id}`,
+    query: { city: city.value, startDate: startDate.value, endDate: endDate.value },
+  })
+}
+</script>
+
+<template>
+  <div>
+    <!-- Шапка с формой -->
+    <div class="bg-primary py-5 px-4 lg:px-0">
+      <div class="container">
+        <div class="bg-white rounded-2xl p-3 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto] items-end">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-gray-400 px-1">Город</label>
+            <USelectMenu
+              v-model="selectedCity"
+              :items="rentCities || []"
+              placeholder="Выберите город"
+              size="lg"
+              :ui="{ base: 'h-11 rounded-xl' }"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-gray-400 px-1">Начало аренды</label>
+            <input
+              v-model="startInput"
+              class="h-11 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:border-primary transition"
+              type="datetime-local"
+            >
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-gray-400 px-1">Завершение аренды</label>
+            <input
+              v-model="endInput"
+              class="h-11 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:border-primary transition"
+              type="datetime-local"
+            >
+          </div>
+          <button
+            class="h-11 px-6 bg-primary text-white font-semibold rounded-xl hover:opacity-90 transition disabled:opacity-50 text-sm whitespace-nowrap"
+            :disabled="!selectedCity || !startInput || !endInput || searching || isLoading"
+            @click="search"
+          >
+            {{ searching ? 'Поиск...' : 'Найти' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container py-8">
+      <!-- Заголовок результатов -->
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold">
+            {{ selectedCity ? `Аренда авто в ${selectedCity}` : 'Аренда автомобилей' }}
+          </h1>
+          <p v-if="startDate && endDate" class="text-sm text-gray-500 mt-1">
+            {{ formatDatetime(startDate) }} — {{ formatDatetime(endDate) }}
+            <span class="ml-1 text-primary font-medium">· {{ daysCount }} {{ daysWord(daysCount) }}</span>
+          </p>
+        </div>
+        <NuxtLink
+          to="/rent"
+          class="text-sm text-gray-500 hover:text-primary transition"
+        >
+          ← Назад
+        </NuxtLink>
+      </div>
+
+      <!-- Загрузка -->
+      <div v-if="isLoading" class="grid lg:grid-cols-3 gap-5">
+        <div
+          v-for="i in 6"
+          :key="i"
+          class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"
+        >
+          <div class="h-44 bg-gray-100" />
+          <div class="p-4 space-y-3">
+            <div class="h-5 bg-gray-100 rounded w-2/3" />
+            <div class="grid grid-cols-2 gap-2">
+              <div class="h-8 bg-gray-100 rounded" />
+              <div class="h-8 bg-gray-100 rounded" />
+              <div class="h-8 bg-gray-100 rounded" />
+              <div class="h-8 bg-gray-100 rounded" />
+            </div>
+            <div class="h-10 bg-gray-100 rounded-xl" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Ошибка или нет параметров -->
+      <div
+        v-else-if="!city || !startDate || !endDate"
+        class="text-center py-20 text-gray-500"
+      >
+        <div class="text-5xl mb-4">🚗</div>
+        <p class="text-lg font-medium mb-2">Укажите параметры поиска</p>
+        <p class="text-sm mb-6">Выберите город и даты аренды</p>
+        <NuxtLink
+          to="/rent"
+          class="px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition"
+        >
+          Перейти к поиску
+        </NuxtLink>
+      </div>
+
+      <!-- Нет результатов -->
+      <div
+        v-else-if="!isLoading && !hasCars"
+        class="text-center py-20 text-gray-500"
+      >
+        <div class="text-5xl mb-4">😔</div>
+        <p class="text-lg font-medium mb-2">Нет доступных автомобилей</p>
+        <p class="text-sm mb-6">Попробуйте изменить даты или выбрать другой город</p>
+        <div class="flex gap-3 justify-center">
+          <button
+            class="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:border-primary hover:text-primary transition"
+            @click="search()"
+          >
+            Изменить даты
+          </button>
+          <NuxtLink
+            to="/rent"
+            class="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition"
+          >
+            Новый поиск
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- Результаты -->
+      <div v-else class="grid lg:grid-cols-3 gap-5">
+        <article
+          v-for="car in cars"
+          :key="car.id"
+          class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition cursor-pointer"
+          @click="openCar(car)"
+        >
+          <!-- Фото -->
+          <div class="h-44 bg-gradient-to-br from-blue-50 to-blue-100 overflow-hidden relative">
+            <img
+              v-if="car.images?.[0]"
+              :src="car.images[0]"
+              :alt="car.name"
+              class="w-full h-full object-cover"
+            >
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <span class="text-6xl">🚗</span>
+            </div>
+          </div>
+
+          <!-- Контент -->
+          <div class="p-4">
+            <h3 class="font-bold text-lg mb-1">{{ car.brand }} {{ car.model }}</h3>
+            <p v-if="car.year" class="text-xs text-gray-400 mb-3">{{ car.year }} г.</p>
+
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
+              <div>
+                <span class="text-gray-400 text-xs block">Пробег/день</span>
+                <span class="font-medium">{{ car.mileagePerDay ? car.mileagePerDay + ' км' : '—' }}</span>
+              </div>
+              <div>
+                <span class="text-gray-400 text-xs block">Залог</span>
+                <span class="font-medium">{{ car.deposit ? formatPrice(car.deposit) : '—' }}</span>
+              </div>
+              <div>
+                <span class="text-gray-400 text-xs block">Мин. срок</span>
+                <span class="font-medium">{{ car.minRentDays }} {{ daysWord(car.minRentDays) }}</span>
+              </div>
+              <div>
+                <span class="text-gray-400 text-xs block">Стоимость от</span>
+                <span class="font-medium text-primary">{{ formatPrice(car.pricePerDay) }}/день</span>
+              </div>
+            </div>
+
+            <button
+              class="w-full h-10 bg-primary text-white font-medium rounded-xl hover:opacity-90 transition text-sm"
+            >
+              Подробнее
+            </button>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</template>

@@ -16,6 +16,10 @@ const accMenu = computed(() => {
       title: 'Мои бронирования',
       url: '/acc/orders',
     },
+    {
+      title: 'Аренда авто',
+      url: '/acc/rent',
+    },
   ]
 
   // Для SUPERADMIN добавляем пункт "Все бронирования"
