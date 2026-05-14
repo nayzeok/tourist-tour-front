@@ -26,6 +26,8 @@ interface RentBooking {
   lastName: string
   phone: string
   totalAmount?: number
+  depositAmount?: number
+  depositStatus?: 'held' | 'captured' | 'released'
   paidAmount?: number
   status: BookingStatus
   paymentStatus: PaymentStatus
@@ -136,6 +138,33 @@ const canCancel = computed(() =>
   booking.value.paymentStatus !== 'paid'
 )
 
+const canRequestCancel = computed(() =>
+  booking.value &&
+  ['new', 'active'].includes(booking.value.status) &&
+  booking.value.paymentStatus === 'paid'
+)
+
+// ─── Попап отмены оплаченной брони ───────────────────────────────────────────
+const cancelRequestOpen = ref(false)
+const sendingCancelRequest = ref(false)
+const cancelRequestSent = ref(false)
+
+async function sendCancelRequest() {
+  if (!booking.value) return
+  sendingCancelRequest.value = true
+  try {
+    await $fetch(`${apiUrl}/rent-user/bookings/${bookingId}/cancel-request`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    cancelRequestSent.value = true
+  } catch (e: any) {
+    alert(e?.data?.message || 'Ошибка отправки заявки')
+  } finally {
+    sendingCancelRequest.value = false
+  }
+}
+
 const days = computed(() =>
   booking.value ? daysCount(booking.value.startDate, booking.value.endDate) : 0
 )
@@ -235,6 +264,13 @@ const debt = computed(() => {
             <span class="text-sm font-medium">К оплате</span>
             <span class="font-bold text-red-500">{{ formatPrice(debt) }}</span>
           </div>
+          <div v-if="booking.depositAmount" class="flex items-center justify-between pt-2 border-t border-gray-100">
+            <span class="text-sm text-gray-600">Залог</span>
+            <div class="text-right">
+              <span class="font-medium">{{ formatPrice(booking.depositAmount) }}</span>
+              <span class="ml-1.5 text-xs text-gray-400">· оплачивается при выдаче авто</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -261,40 +297,92 @@ const debt = computed(() => {
       </div>
 
       <!-- Действия -->
-      <div class="flex flex-col sm:flex-row gap-3 pt-1">
-        <!-- Оплата -->
-        <div v-if="canPay" class="flex-1">
+      <div class="space-y-2 pt-1">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <!-- Оплата -->
           <button
+            v-if="canPay"
             :disabled="paying"
-            class="w-full py-3 bg-primary text-white rounded-2xl font-semibold text-base hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            class="flex-1 h-12 bg-primary text-white rounded-2xl font-semibold text-base hover:opacity-90 transition disabled:opacity-50"
             @click="pay"
           >
-            <span v-if="paying">Подготовка оплаты...</span>
-            <span v-else>
-              Оплатить {{ formatPrice(debt ?? booking.totalAmount) }}
-            </span>
+            {{ paying ? 'Подготовка оплаты...' : `Оплатить ${formatPrice(debt ?? booking.totalAmount)}` }}
           </button>
-          <p v-if="payError" class="text-red-500 text-xs mt-2 text-center">{{ payError }}</p>
-          <p class="text-xs text-gray-400 text-center mt-1">Безопасная оплата через PayKeeper</p>
+
+          <!-- Отмена (неоплаченная) -->
+          <button
+            v-if="canCancel"
+            :disabled="cancelling"
+            class="h-12 px-6 border border-red-200 text-red-500 rounded-2xl font-medium text-sm hover:bg-red-50 transition disabled:opacity-50"
+            @click="cancel"
+          >
+            {{ cancelling ? 'Отмена...' : 'Отменить' }}
+          </button>
+
+          <!-- Отмена (оплаченная — через администратора) -->
+          <button
+            v-if="canRequestCancel"
+            class="h-12 px-6 border border-red-200 text-red-500 rounded-2xl font-medium text-sm hover:bg-red-50 transition"
+            @click="cancelRequestOpen = true"
+          >
+            Отменить
+          </button>
+
+          <NuxtLink
+            to="/acc/rent"
+            class="h-12 px-6 border border-gray-200 rounded-2xl font-medium text-sm hover:bg-gray-50 transition flex items-center justify-center"
+          >
+            Назад к списку
+          </NuxtLink>
         </div>
-
-        <!-- Отмена -->
-        <button
-          v-if="canCancel"
-          :disabled="cancelling"
-          class="px-6 py-3 border border-red-200 text-red-500 rounded-2xl font-medium text-sm hover:bg-red-50 transition disabled:opacity-50"
-          @click="cancel"
-        >
-          {{ cancelling ? 'Отмена...' : 'Отменить бронирование' }}
-        </button>
-
-        <NuxtLink
-          to="/acc/rent"
-          class="px-6 py-3 border border-gray-200 rounded-2xl font-medium text-sm hover:bg-gray-50 transition text-center"
-        >
-          Назад к списку
-        </NuxtLink>
+        <p v-if="canPay" class="text-xs text-gray-400 text-center">Безопасная оплата через PayKeeper</p>
+        <p v-if="payError" class="text-red-500 text-xs text-center">{{ payError }}</p>
       </div>
     </div>
   </div>
+
+  <!-- Попап: отмена оплаченного бронирования -->
+  <Teleport to="body">
+    <div
+      v-if="cancelRequestOpen"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      @click.self="cancelRequestOpen = false"
+    >
+      <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+        <div v-if="!cancelRequestSent">
+          <h3 class="font-bold text-lg mb-2">Отмена бронирования</h3>
+          <p class="text-sm text-gray-600 mb-4">
+            Отмена оплаченного бронирования возможна только через администратора.
+            После отправки заявки мы свяжемся с вами для уточнения деталей.
+          </p>
+          <div class="flex gap-3">
+            <button
+              :disabled="sendingCancelRequest"
+              class="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
+              @click="sendCancelRequest"
+            >
+              {{ sendingCancelRequest ? 'Отправка...' : 'Отправить заявку на отмену' }}
+            </button>
+            <button
+              class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+              @click="cancelRequestOpen = false"
+            >
+              Назад
+            </button>
+          </div>
+        </div>
+        <div v-else class="text-center py-4">
+          <div class="text-4xl mb-3">✅</div>
+          <h3 class="font-bold text-lg mb-2">Заявка отправлена</h3>
+          <p class="text-sm text-gray-600 mb-4">Администратор свяжется с вами в ближайшее время.</p>
+          <button
+            class="px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition"
+            @click="cancelRequestOpen = false"
+          >
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

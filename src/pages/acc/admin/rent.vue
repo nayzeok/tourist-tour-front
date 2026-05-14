@@ -13,6 +13,7 @@ interface RentProgBooking {
   id: number
   car_name?: string
   car?: { car_name?: string; id?: number }
+  client?: { name?: string; lastname?: string; phone?: string; email?: string; [key: string]: any }
   car_id?: number
   start_date?: string
   end_date?: string
@@ -27,6 +28,9 @@ interface RentProgBooking {
   paid?: number
   debt?: number
   deposit?: number
+  depositAmount?: number
+  depositStatus?: 'held' | 'captured' | 'released'
+  paykeeperPaymentId?: string
   active?: boolean
   status?: string
   comment?: string
@@ -106,8 +110,8 @@ function carName(b: RentProgBooking) {
   return b.car_name || b.car?.car_name || `Авто #${b.car_id ?? '?'}`
 }
 function clientName(b: RentProgBooking) {
-  const first = b.name || b.client_name || ''
-  const last = b.lastname || b.client_lastname || ''
+  const first = b.name || b.client?.name || b.client_name || ''
+  const last = b.lastname || b.client?.lastname || b.client_lastname || ''
   return [first, last].filter(Boolean).join(' ') || '—'
 }
 function formatMoney(n?: number | null) {
@@ -126,6 +130,52 @@ const detailBooking = ref<RentProgBooking | null>(null)
 function openDetail(b: RentProgBooking) {
   detailBooking.value = b
   detailOpen.value = true
+}
+
+// ─── Завершение аренды (capture/void холда) ────────────────────────────────
+const completeOpen = ref(false)
+const completeBooking = ref<RentProgBooking | null>(null)
+const damageAmount = ref('')
+const completing = ref(false)
+const completeError = ref<string | null>(null)
+
+function openComplete(b: RentProgBooking) {
+  completeBooking.value = b
+  damageAmount.value = ''
+  completeError.value = null
+  completeOpen.value = true
+}
+
+async function completeRental() {
+  if (!completeBooking.value) return
+  completing.value = true
+  completeError.value = null
+  try {
+    await $fetch(`${apiUrl}/rent-user/admin/bookings/${completeBooking.value.id}/complete`, {
+      method: 'POST',
+      credentials: 'include',
+      body: { damageAmount: damageAmount.value ? Number(damageAmount.value) : 0 },
+    })
+    completeOpen.value = false
+    await load()
+  } catch (e: any) {
+    completeError.value = e?.data?.message || 'Ошибка завершения аренды'
+  } finally {
+    completing.value = false
+  }
+}
+
+async function releaseDeposit(b: RentProgBooking) {
+  if (!confirm('Отменить холд и вернуть всю сумму клиенту?')) return
+  try {
+    await $fetch(`${apiUrl}/rent-user/admin/bookings/${b.id}/release-deposit`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    await load()
+  } catch (e: any) {
+    alert(e?.data?.message || 'Ошибка отмены холда')
+  }
 }
 
 // ─── Редактирование ──────────────────────────────────────────────────────────
@@ -344,6 +394,9 @@ async function saveEdit() {
                 <span :class="['w-1.5 h-1.5 rounded-full', b.active ? 'bg-green-500' : 'bg-gray-400']" />
                 {{ b.active ? 'Активна' : 'Неактивна' }}
               </span>
+              <div v-if="b.depositAmount" class="mt-1">
+                <span class="text-xs text-gray-400">Залог {{ b.depositAmount?.toLocaleString('ru-RU') }} ₽ · при выдаче</span>
+              </div>
               <p v-if="b.comment" class="text-xs text-gray-400 mt-1 max-w-28 truncate" :title="b.comment">
                 {{ b.comment }}
               </p>
@@ -351,12 +404,21 @@ async function saveEdit() {
 
             <!-- Действия -->
             <td class="px-4 py-3" @click.stop>
-              <button
-                class="text-xs px-3 py-1.5 bg-primary text-white rounded-lg hover:opacity-80 transition whitespace-nowrap"
-                @click="openEdit(b)"
-              >
-                Изменить
-              </button>
+              <div class="flex flex-col gap-1.5">
+                <button
+                  class="text-xs px-3 py-1.5 bg-primary text-white rounded-lg hover:opacity-80 transition whitespace-nowrap"
+                  @click="openEdit(b)"
+                >
+                  Изменить
+                </button>
+                <button
+                  v-if="b.depositStatus === 'held'"
+                  class="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:opacity-80 transition whitespace-nowrap"
+                  @click="openComplete(b)"
+                >
+                  Завершить аренду
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -613,4 +675,66 @@ async function saveEdit() {
       </div>
     </Teleport>
   </div>
+
+  <!-- ====== Попап завершения аренды ====== -->
+  <Teleport to="body">
+    <div
+      v-if="completeOpen && completeBooking"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      @click.self="completeOpen = false"
+    >
+      <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+        <h3 class="font-bold text-lg mb-1">Завершить аренду</h3>
+        <p class="text-sm text-gray-500 mb-4">
+          {{ completeBooking ? carName(completeBooking) : '' }},
+          {{ completeBooking ? clientName(completeBooking) : '' }}
+        </p>
+
+        <div class="bg-orange-50 border border-orange-100 rounded-xl p-3 mb-4 text-sm text-orange-700">
+          <p class="font-medium mb-1">Залог заблокирован: {{ completeBooking.depositAmount?.toLocaleString('ru-RU') }} ₽</p>
+          <p class="text-xs">Стоимость аренды {{ completeBooking.total?.toLocaleString('ru-RU') ?? '—' }} ₽ будет списана. Остаток возвращён клиенту.</p>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Сумма ущерба (₽)</label>
+            <input
+              v-model="damageAmount"
+              type="number"
+              min="0"
+              :max="completeBooking.depositAmount"
+              placeholder="0 — нет повреждений"
+              class="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:border-primary transition"
+            >
+            <p class="text-xs text-gray-400 mt-1">Будет удержано из залога. Максимум: {{ completeBooking.depositAmount?.toLocaleString('ru-RU') }} ₽</p>
+          </div>
+        </div>
+
+        <p v-if="completeError" class="text-red-500 text-xs mt-3">{{ completeError }}</p>
+
+        <div class="flex flex-col gap-2 mt-5">
+          <button
+            :disabled="completing"
+            class="py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
+            @click="completeRental"
+          >
+            {{ completing ? 'Обработка...' : damageAmount && Number(damageAmount) > 0 ? `Завершить и удержать ${Number(damageAmount).toLocaleString('ru-RU')} ₽` : 'Завершить и вернуть залог' }}
+          </button>
+          <button
+            :disabled="completing"
+            class="py-2.5 border border-red-200 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 transition disabled:opacity-50"
+            @click="releaseDeposit(completeBooking); completeOpen = false"
+          >
+            Отменить и вернуть всё
+          </button>
+          <button
+            class="py-2 text-gray-400 text-sm hover:text-gray-600 transition"
+            @click="completeOpen = false"
+          >
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

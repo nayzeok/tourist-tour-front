@@ -20,6 +20,8 @@ interface RentBooking {
   lastName: string
   phone: string
   totalAmount?: number
+  depositAmount?: number
+  depositStatus?: 'held' | 'captured' | 'released'
   status: BookingStatus
   paymentStatus: PaymentStatus
   paidAmount?: number
@@ -100,7 +102,25 @@ const paymentColors: Record<PaymentStatus, string> = {
   paid: 'text-green-600',
 }
 
-// Отмена бронирования
+// Оплата бронирования
+const paying = ref<string | null>(null)
+
+async function payBooking(id: string) {
+  paying.value = id
+  try {
+    const res = await $fetch<{ paymentLink: string }>(`${apiUrl}/rent-user/bookings/${id}/pay`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    window.location.href = res.paymentLink
+  } catch (e: any) {
+    alert(e?.data?.message || 'Не удалось создать ссылку на оплату')
+  } finally {
+    paying.value = null
+  }
+}
+
+// Отмена бронирования (неоплаченная)
 const cancelling = ref<string | null>(null)
 
 async function cancelBooking(id: string) {
@@ -117,6 +137,32 @@ async function cancelBooking(id: string) {
   } finally {
     cancelling.value = null
   }
+}
+
+// Отмена оплаченного бронирования — через попап
+const cancelRequestBooking = ref<RentBooking | null>(null)
+const sendingCancelRequest = ref(false)
+const cancelRequestSent = ref(false)
+
+async function sendCancelRequest() {
+  if (!cancelRequestBooking.value) return
+  sendingCancelRequest.value = true
+  try {
+    await $fetch(`${apiUrl}/rent-user/bookings/${cancelRequestBooking.value.id}/cancel-request`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    cancelRequestSent.value = true
+  } catch (e: any) {
+    alert(e?.data?.message || 'Ошибка отправки заявки')
+  } finally {
+    sendingCancelRequest.value = false
+  }
+}
+
+function openCancelRequest(b: RentBooking) {
+  cancelRequestBooking.value = b
+  cancelRequestSent.value = false
 }
 </script>
 
@@ -226,6 +272,9 @@ async function cancelBooking(id: string) {
               <span :class="['text-xs font-medium', paymentColors[b.paymentStatus]]">
                 {{ paymentLabels[b.paymentStatus] }}
               </span>
+              <span v-if="b.depositAmount" class="text-xs text-gray-400">
+                Залог {{ formatPrice(b.depositAmount) }} · при выдаче
+              </span>
               <span v-if="b.city" class="text-xs text-gray-400">📍 {{ b.city }}</span>
             </div>
           </div>
@@ -241,7 +290,17 @@ async function cancelBooking(id: string) {
           </NuxtLink>
 
           <div class="flex gap-2">
-            <!-- Отмена: только для new и partial -->
+            <!-- Оплатить: для неоплаченных активных/новых броней -->
+            <button
+              v-if="['new', 'active'].includes(b.status) && b.paymentStatus !== 'paid' && b.totalAmount"
+              :disabled="paying === b.id"
+              class="text-xs px-3 py-1.5 bg-primary text-white rounded-lg hover:opacity-90 transition disabled:opacity-50"
+              @click="payBooking(b.id)"
+            >
+              {{ paying === b.id ? 'Загрузка...' : 'Оплатить' }}
+            </button>
+
+            <!-- Отмена: только для new/active неоплаченных -->
             <button
               v-if="['new', 'active'].includes(b.status) && b.paymentStatus !== 'paid'"
               :disabled="cancelling === b.id"
@@ -250,9 +309,66 @@ async function cancelBooking(id: string) {
             >
               {{ cancelling === b.id ? 'Отмена...' : 'Отменить' }}
             </button>
+
+            <!-- Отмена оплаченной брони — через администратора -->
+            <button
+              v-if="['new', 'active'].includes(b.status) && b.paymentStatus === 'paid'"
+              class="text-xs px-3 py-1.5 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition"
+              @click="openCancelRequest(b)"
+            >
+              Отменить
+            </button>
           </div>
         </div>
       </article>
     </div>
   </div>
+
+  <!-- Попап отмены оплаченного бронирования -->
+  <Teleport to="body">
+    <div
+      v-if="cancelRequestBooking"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      @click.self="cancelRequestBooking = null"
+    >
+      <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+        <div v-if="!cancelRequestSent">
+          <h3 class="font-bold text-lg mb-2">Отмена бронирования</h3>
+          <p class="text-sm text-gray-600 mb-1">
+            <span class="font-medium">{{ cancelRequestBooking.carName }}</span>
+          </p>
+          <p class="text-sm text-gray-600 mb-4">
+            Отмена оплаченного бронирования возможна только через администратора.
+            После отправки заявки мы свяжемся с вами для уточнения деталей.
+          </p>
+          <div class="flex gap-3">
+            <button
+              :disabled="sendingCancelRequest"
+              class="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
+              @click="sendCancelRequest"
+            >
+              {{ sendingCancelRequest ? 'Отправка...' : 'Отправить заявку' }}
+            </button>
+            <button
+              class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+              @click="cancelRequestBooking = null"
+            >
+              Назад
+            </button>
+          </div>
+        </div>
+        <div v-else class="text-center py-4">
+          <div class="text-4xl mb-3">✅</div>
+          <h3 class="font-bold text-lg mb-2">Заявка отправлена</h3>
+          <p class="text-sm text-gray-600 mb-4">Администратор свяжется с вами в ближайшее время.</p>
+          <button
+            class="px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition"
+            @click="cancelRequestBooking = null"
+          >
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

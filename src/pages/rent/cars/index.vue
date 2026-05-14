@@ -2,6 +2,8 @@
 import { searchRentCars } from '~/src/shared/api/rent'
 import type { RentCar } from '~/src/shared/types/rent'
 
+const config = useRuntimeConfig()
+
 definePageMeta({ layout: 'default' })
 
 const route = useRoute()
@@ -34,13 +36,16 @@ function daysWord(n: number) {
   return 'дней'
 }
 
-// Загрузка авто
-const { data: cars, status, error, refresh } = await useAsyncData<RentCar[]>(
+// Загрузка авто: если нет параметров — грузим все авто
+const { data: cars, status, error } = await useAsyncData<RentCar[]>(
   () => `rent-cars-${city.value}-${startDate.value}-${endDate.value}`,
   async () => {
-    if (!city.value || !startDate.value || !endDate.value) return []
     try {
-      return await searchRentCars({ city: city.value, startDate: startDate.value, endDate: endDate.value })
+      if (city.value && startDate.value && endDate.value) {
+        return await searchRentCars({ city: city.value, startDate: startDate.value, endDate: endDate.value })
+      }
+      // Нет параметров — показываем все авто
+      return await $fetch<RentCar[]>(`${config.public.apiUrl}/rent/cars/all`)
     } catch {
       return []
     }
@@ -101,22 +106,6 @@ function openCar(car: RentCar) {
             <div class="h-10 bg-gray-100 rounded-xl" />
           </div>
         </div>
-      </div>
-
-      <!-- Ошибка или нет параметров -->
-      <div
-        v-else-if="!city || !startDate || !endDate"
-        class="text-center py-20 text-gray-500"
-      >
-        <div class="text-5xl mb-4">🚗</div>
-        <p class="text-lg font-medium mb-2">Укажите параметры поиска</p>
-        <p class="text-sm mb-6">Выберите город и даты аренды</p>
-        <NuxtLink
-          to="/rent"
-          class="px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition"
-        >
-          Перейти к поиску
-        </NuxtLink>
       </div>
 
       <!-- Нет результатов -->

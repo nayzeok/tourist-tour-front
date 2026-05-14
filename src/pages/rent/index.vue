@@ -40,15 +40,37 @@ const reviews = [
   { name: 'Ольга С.', city: 'Екатеринбург', rating: 5, text: 'Оформила за 5 минут, данные сохранились в кабинете. В следующий раз бронировать ещё быстрее.' },
 ]
 
-// --- Примеры авто (статика для лендинга) ---
-const exampleCars = [
-  { name: 'Kia Rio', price: 2800, deposit: 15000, mileage: 200, minDays: 3 },
-  { name: 'Toyota Camry', price: 5500, deposit: 30000, mileage: 250, minDays: 1 },
-  { name: 'Hyundai Creta', price: 3900, deposit: 20000, mileage: 200, minDays: 2 },
-]
+// --- Дефолтные даты для кнопок "Подробнее" (+1 и +3 дня, только клиент) ---
+const defaultStartDate = ref('')
+const defaultEndDate = ref('')
+onMounted(() => {
+  const s = new Date(); s.setDate(s.getDate() + 1)
+  const e = new Date(); e.setDate(e.getDate() + 3)
+  defaultStartDate.value = s.toISOString().slice(0, 16)
+  defaultEndDate.value = e.toISOString().slice(0, 16)
+})
+
+// --- Реальные авто из API (только клиент, чтобы не было гидрационного мисматча) ---
+const { data: previewCars } = useAsyncData(
+  'rent-preview-cars',
+  () => $fetch<any[]>(`${useRuntimeConfig().public.apiUrl}/rent/cars/all`).catch(() => []),
+  { default: () => [], server: false },
+)
 
 function formatPrice(n: number) {
   return n.toLocaleString('ru-RU') + ' ₽'
+}
+
+// --- Финальный CTA ---
+const selectedCity = ref('')
+const startDate = ref('')
+const searching = ref(false)
+
+async function search() {
+  if (!selectedCity.value || !startDate.value) return
+  searching.value = true
+  await router.push({ path: '/rent/cars', query: { city: selectedCity.value, startDate: startDate.value } })
+  searching.value = false
 }
 </script>
 
@@ -87,38 +109,59 @@ function formatPrice(n: number) {
           </NuxtLink>
         </div>
 
-        <div class="grid lg:grid-cols-3 gap-5">
+        <!-- Скелетон пока грузится -->
+        <div v-if="!previewCars?.length" class="grid lg:grid-cols-3 gap-5">
+          <div v-for="i in 3" :key="i" class="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+            <div class="h-44 bg-gray-100" />
+            <div class="p-4 space-y-3">
+              <div class="h-5 bg-gray-100 rounded w-2/3" />
+              <div class="h-4 bg-gray-100 rounded w-1/2" />
+              <div class="h-10 bg-gray-100 rounded-xl" />
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="grid lg:grid-cols-3 gap-5">
           <div
-            v-for="car in exampleCars"
-            :key="car.name"
-            class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition"
+            v-for="car in previewCars.slice(0, 3)"
+            :key="car.id"
+            class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition flex flex-col"
           >
-            <div class="h-44 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+            <!-- Фото -->
+            <div class="h-44 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center overflow-hidden relative">
+              <img
+                v-if="car.images?.[0]"
+                :src="car.images[0]"
+                :alt="car.name"
+                class="absolute inset-0 w-full h-full object-contain"
+                @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+              >
               <span class="text-6xl">🚗</span>
             </div>
-            <div class="p-4">
+
+            <div class="p-4 flex flex-col flex-1">
               <h3 class="font-bold text-lg mb-3">{{ car.name }}</h3>
-              <div class="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-4">
-                <div>
+              <div class="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-4 flex-1">
+                <div v-if="car.mileagePerDay">
                   <span class="text-gray-400 text-xs block">Пробег/день</span>
-                  <span class="font-medium">{{ car.mileage }} км</span>
+                  <span class="font-medium">{{ car.mileagePerDay }} км</span>
                 </div>
-                <div>
+                <div v-if="car.deposit">
                   <span class="text-gray-400 text-xs block">Депозит</span>
                   <span class="font-medium">{{ formatPrice(car.deposit) }}</span>
                 </div>
-                <div>
-                  <span class="text-gray-400 text-xs block">Мин. срок</span>
-                  <span class="font-medium">{{ car.minDays }} д.</span>
+                <div v-if="car.transmission">
+                  <span class="text-gray-400 text-xs block">КПП</span>
+                  <span class="font-medium">{{ car.transmission }}</span>
                 </div>
                 <div>
                   <span class="text-gray-400 text-xs block">Стоимость от</span>
-                  <span class="font-medium text-primary">{{ formatPrice(car.price) }}/день</span>
+                  <span class="font-medium text-primary">{{ formatPrice(car.pricePerDay) }}/день</span>
                 </div>
               </div>
               <NuxtLink
-                to="/rent/cars"
-                class="block w-full h-10 bg-primary text-white font-medium rounded-xl hover:opacity-90 transition text-sm flex items-center justify-center"
+                :to="{ path: `/rent/cars/${car.id}`, query: { startDate: defaultStartDate, endDate: defaultEndDate } }"
+                class="block w-full h-10 bg-primary text-white font-medium rounded-xl hover:opacity-90 transition text-sm flex items-center justify-center mt-auto"
               >
                 Подробнее
               </NuxtLink>
